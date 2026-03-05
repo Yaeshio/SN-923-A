@@ -51,9 +51,22 @@
     1. 部品のアクセス権限（存在確認）チェック。
     2. `StorageService` を経由して一時的な閲覧URLを取得。
 
-## 2. バリデーションルール
-- STLファイルのバリデーション（サイズ、拡張子）。
-- ステータス遷移の整合性チェック:
-    - `dccs/SN-923-stats.md` の定義に基づいた順方向・逆方向（戻り）の許可。
-    - **工程スキップの禁止**: 前後の定義を逸脱した遷移（例: `PRINTING` から `INSPECTION` へ直接飛ぶ）を禁止。
-    - 完了ステータス (`SHIPPED/DISCARD/CANCELLED`) からのリカバリ時は、`reason_code` の指定を必須とする。
+## 3. 実装詳細（提案）
+
+### 3.1 STL解析の具体ロジック
+- **ライブラリ**: `three.js` (Server-side) または `stl-reader` を使用。
+- **抽出項目**: 
+    - メタデータからの `part_number` 抽出（ファイル名優先）。
+    - 余裕があれば：バウンディングボックスサイズ（UIでの表示用）。
+- **正規表現例**: `PartNumber` は `^[A-Z0-9_-]+$` とし、ファイル名から拡張子を除いた部分を初期値とする。
+
+### 3.2 異常系の挙動
+- **DB/Storage不整合への対応**:
+    - `Storage` 保存失敗時：`Transaction` がロールバックされるため DB の `PENDING` レコードも生成されない（または削除）。
+    - 致命的なエラー（DB更新失敗だがStorage保存済み）：定期的なクリーンアップジョブ（Edge Config または Cron）により、`PENDING` かつ一定時間経過した `Part` に紐づく Storage ファイルを削除する。
+- **Box枯渇時の挙動**: 
+    - `OrderPipeline` 内で例外 `InSufficientStorageError` をスローし、UI側で「空きBoxが不足しています。出荷済みBoxの解放を確認してください」という警告トーストを表示する。
+
+### 3.3 型安全の構築
+- **Zod Schema**: 
+    - `InsertPartItemSchema`, `UpdateStatusSchema` を定義し、API境界とDB境界の両方で検証する。

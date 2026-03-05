@@ -56,31 +56,28 @@ erDiagram
     }
 ```
 
-## 2. テーブル詳細
+## 2. テーブル詳細・詳細定義
 
-### 2.1 Part (部品マスタ)
-設計データの基本単位。
-- `id`: 内部ID
-- `part_number`: 型番・図番
-- `stl_url`: Firebase Storage上のパス
-- `status`: インポート進捗状態
-    - `PENDING`: DB登録済み、ファイルアップロード待ち
-    - `ACTIVE`: ファイルアップロード完了、利用可能
+### 2.1 型定義の方針
+- **ID**: 全テーブルで `UUID v7` (ソート可能なUUID) を採用。Drizzle ORM での挿入時に生成、または DB 側で生成。
+- **Enum**: Postgres の `ENUM` 型として定義。
 
-### 2.2 PartItem (個体データ)
-製造現場で実際に動く「モノ」の単位。
-- `id`: シリアルID
-- `status`: 現在の工程（例: 待機、製造中、検査済、出荷済）
-- `box_id`: 物理的な棚や箱のID
+### 2.2 具体的な Enum 定義
+- **PartStatus**: `PENDING`, `ACTIVE`
+- **ItemStatus**: `READY`, `PRINTING`, `CUTTING`, `SANDING`, `INSPECTION`, `COMPLETED`, `SHIPPED`, `DISCARD`, `CANCELLED`
+- **MachineStatus**: `READY`, `RUNNING`, `MAINTENANCE`
+- **BoxStatus**: `AVAILABLE`, `OCCUPIED`
+- **ReasonCode**:
+    - `OPERATIONAL_ERROR`: 操作ミス（リカバリ用）
+    - `QUALITY_ISSUE`: 品質不良（廃棄・戻り用）
+    - `EQUIPMENT_FAILURE`: 装置故障（戻り用）
+    - `ORDER_CANCEL`: 指示取消（キャンセル用）
 
-### 2.3 StatusHistory (履歴)
-トレーサビリティのための変更ログ。
-- `part_item_id`: 対象個体
-- `status_from / status_to`: 遷移前後
-- `reason_code`: 遷移理由コード（戻り、廃棄、リカバリの理由）
-- `comment`: 遷移に関する付記
-- `changed_at`: 変更日時
+### 2.3 テーブル詳細 (補足)
+- **PartItem**: `updated_at` は `DEFAULT CURRENT_TIMESTAMP` および `ON UPDATE` で自動更新。
+- **StatusHistory**: `changed_at` は履歴作成時のタイムスタンプ。
 
-### 2.4 Box (保管場所)
-- `name`: 場所名（棚A-1等）
-- `status`: 空き状況の管理
+## 3. インデックス・制約
+- `PartItem.status` にインデックス（ボード表示の高速化）。
+- `Box.status` にインデックス（空きBox検索の高速化）。
+- `Part.part_number` は `Project` 内でユニーク制約を検討（将来拡張）。

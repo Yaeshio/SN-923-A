@@ -41,7 +41,18 @@ src/
     - `StorageService.releaseBoxIfDone()` (必要に応じて)
     - トランザクション・コミット
 
-## 3. 実装の制約・ガイドライン
-- **疎結合**: モジュール間の直接的なService呼び出しは避け、必要に応じてモジュールを跨ぐPipelineを作成する。
-- **副作用の明示**: 外部ストレージ操作や通知などの副作用はPipeline層、またはその上位のAction層で管理し、Service層はDB操作に集中させる。
-- **不整合防止策**: ストレージとDBの不整合を防ぐため、外部リソース保存前にIDを確定させる「Pending-Activateパターン」を基本とする。
+## 4. 技術スタック (Confirmed)
+エージェントによる実装およびデプロイに使用する技術スタックを以下に定める。
+
+- **Frontend**: Next.js (App Router), Tailwind CSS
+- **UI Components**: Shadcn/UI (Radix UI)
+- **Database**: Neon (Serverless Postgres)
+- **ORM**: Drizzle ORM (Neon との相性が良く、サーバーレス環境で軽量に動作するため)
+- **Deployment**: Vercel
+- **Storage**: Firebase Storage (STLファイル管理)
+- **Validation**: Zod
+
+## 5. 開発・デプロイフロー
+- **データベース管理**: Neon Studio を使用し、開発用ブランチと本番用ブランチを分離する。
+- **本番反映**: Vercel の Preview Deployment を活用し、性能・動作検証後に本番ブランチへマージする。
+- **環境差異**: `.env.local` (開発用) と Vercel Environment Variables (本番用) で接続先を切り替える。
