@@ -25,11 +25,11 @@ export enum ReasonCode {
 
 export interface PartItem {
     id: string;
-    part_id: string;
-    machine_id: string;
-    box_id: string;
+    partId: string;
+    machineId: string;
+    boxId: string;
     status: ItemStatus;
-    updated_at: Date;
+    updatedAt: Date;
 }
 
 export interface Machine {
@@ -41,10 +41,10 @@ export interface Machine {
 
 export interface StatusHistory {
     id: string;
-    part_item_id: string;
-    status_from: ItemStatus | null;
-    status_to: ItemStatus;
-    reason_code?: ReasonCode;
+    partItemId: string;
+    statusFrom: ItemStatus | null;
+    statusTo: ItemStatus;
+    reasonCode?: ReasonCode;
     comment?: string;
-    changed_at: Date;
+    changedAt: Date;
 }

@@ -5,6 +5,7 @@ import { createTestProject, createTestUnit } from '../../../factories';
 import { db } from '../../../../src/shared/db';
 import { parts } from '../../../../src/shared/db/schema';
 import { eq } from 'drizzle-orm';
+import { PartStatus } from '../../../../src/modules/design-registry/types';
 
 vi.mock('../../../../src/shared/services/index', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../../../src/shared/services/index')>();
@@ -26,36 +27,45 @@ describe('ImportPipeline', () => {
         pipeline = new ImportPipelineImpl();
     });
 
-    it('初期状態（PENDING）の部品レコードが生成できること', async () => {
+    it('一連の処理が成功し、部品が ACTIVE ステータスで保存されること', async () => {
         // Arrange
         const project = await createTestProject();
         const unit = await createTestUnit({ projectId: project.id });
-        vi.mocked(StorageService.uploadFile).mockResolvedValueOnce('url/to/file');
+        vi.mocked(StorageService.uploadFile).mockResolvedValue('url/to/file');
 
-        // Act - Expect to fail since not implemented, but we changed the mock
-        await expect(pipeline.execute({ files: ['file.stl'], projectId: project.id, unitId: unit.id }))
-            .rejects.toThrow();
+        // Act
+        const result = await pipeline.execute({ 
+            files: [{ name: 'file.stl' } as any], 
+            projectId: project.id, 
+            unitId: unit.id 
+        });
 
-        // Validations will go here once implemented
-        // const actualParts = await db.select().from(parts).where(eq(parts.unitId, unit.id));
-        // expect(actualParts).toHaveLength(1);
+        // Assert
+        expect(result[0].status).toBe(PartStatus.ACTIVE);
+        expect(result[0].stlUrl).toBe('url/to/file');
+
+        const dbPart = await db.query.parts.findFirst({
+            where: eq(parts.id, result[0].id),
+        });
+        expect(dbPart?.status).toBe(PartStatus.ACTIVE);
     });
 
-    it('ストレージ保存成功時にステータスが ACTIVE に更新されること', async () => {
-        const project = await createTestProject();
-        const unit = await createTestUnit({ projectId: project.id });
-        vi.mocked(StorageService.uploadFile).mockResolvedValueOnce('url/to/file');
-
-        await expect(pipeline.execute({ files: ['file.stl'], projectId: project.id, unitId: unit.id }))
-            .rejects.toThrow();
-    });
-
-    it('ストレージ保存エラー時に適切にクリーンアップされること（PENDINGレコードの削除またはリトライ対象化）', async () => {
+    it('ストレージ保存エラー時にレコードが適切にロールバック（削除）されること', async () => {
+        // Arrange
         const project = await createTestProject();
         const unit = await createTestUnit({ projectId: project.id });
         vi.mocked(StorageService.uploadFile).mockRejectedValueOnce(new Error('Storage Error'));
 
-        await expect(pipeline.execute({ files: ['file.stl'], projectId: project.id, unitId: unit.id }))
-            .rejects.toThrow();
+        // Act & Assert
+        await expect(pipeline.execute({ 
+            files: [{ name: 'file.stl' } as any], 
+            projectId: project.id, 
+            unitId: unit.id 
+        })).rejects.toThrow('Storage Error');
+
+        const dbParts = await db.query.parts.findMany({
+            where: eq(parts.unitId, unit.id),
+        });
+        expect(dbParts).toHaveLength(0);
     });
 });

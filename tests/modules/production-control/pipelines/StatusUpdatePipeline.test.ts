@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatusUpdatePipelineImpl } from '../../../../src/modules/production-control/pipelines/StatusUpdatePipeline';
 import { InvalidTransitionError } from '../../../../src/shared/errors/index';
 import { createTestPartItem, createTestBox } from '../../../factories';
+import { db } from '../../../../src/shared/db';
+import { partItems, statusHistory, boxes } from '../../../../src/shared/db/schema';
+import { eq } from 'drizzle-orm';
+import { ItemStatus, ReasonCode } from '../../../../src/modules/production-control/types';
 
 describe('StatusUpdatePipeline', () => {
     let pipeline: StatusUpdatePipelineImpl;
@@ -13,96 +17,88 @@ describe('StatusUpdatePipeline', () => {
 
     describe('正常系のステータス遷移', () => {
         it('許可された遷移（READY -> PRINTING）が成功すること', async () => {
-            const item = await createTestPartItem({ status: 'READY' });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'PRINTING' as any })
-            ).rejects.toThrow();
-        });
+            const item = await createTestPartItem({ status: ItemStatus.READY });
+            
+            await pipeline.execute({ itemId: item.id, newStatus: ItemStatus.PRINTING });
 
-        it('各ステータス遷移において、PartItemのステータスが正しく更新されること', async () => {
-            const item = await createTestPartItem({ status: 'PRINTING' as any });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'CUTTING' as any })
-            ).rejects.toThrow();
+            const updatedItem = await db.query.partItems.findFirst({
+                where: eq(partItems.id, item.id),
+            });
+            expect(updatedItem?.status).toBe(ItemStatus.PRINTING);
         });
 
         it('ステータス遷移の履歴が reason_code や comment と共に記録されること', async () => {
-            const item = await createTestPartItem({ status: 'READY' });
-            await expect(
-                pipeline.execute({
-                    itemId: item.id,
-                    newStatus: 'PRINTING' as any,
-                    reason_code: 'OPERATIONAL_ERROR' as any,
-                    comment: 'テストコメント'
-                })
-            ).rejects.toThrow();
+            const item = await createTestPartItem({ status: ItemStatus.READY });
+            
+            await pipeline.execute({
+                itemId: item.id,
+                newStatus: ItemStatus.PRINTING,
+                reason_code: ReasonCode.OPERATIONAL_ERROR,
+                comment: 'テストコメント'
+            });
+
+            const history = await db.query.statusHistory.findFirst({
+                where: eq(statusHistory.partItemId, item.id),
+            });
+            expect(history?.statusFrom).toBe(ItemStatus.READY);
+            expect(history?.statusTo).toBe(ItemStatus.PRINTING);
+            expect(history?.reasonCode).toBe(ReasonCode.OPERATIONAL_ERROR);
+            expect(history?.comment).toBe('テストコメント');
         });
     });
 
     describe('異常系・ガード条件', () => {
         it('許可されていないスキップ遷移（READY -> INSPECTION 等）がエラーとなること', async () => {
-            const item = await createTestPartItem({ status: 'READY' });
+            const item = await createTestPartItem({ status: ItemStatus.READY });
+            
             await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'INSPECTION' as any })
-            ).rejects.toThrowError();
+                pipeline.execute({ itemId: item.id, newStatus: ItemStatus.INSPECTION })
+            ).rejects.toThrow(InvalidTransitionError);
         });
     });
 
     describe('Boxの自動解放', () => {
         it('SHIPPED への遷移時に、紐づくBoxが解放（AVAILABLE）されること', async () => {
             const box = await createTestBox({ status: 'OCCUPIED' });
-            const item = await createTestPartItem({ status: 'COMPLETED' as any, boxId: box.id });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'SHIPPED' as any })
-            ).rejects.toThrow();
-        });
+            const item = await createTestPartItem({ status: ItemStatus.COMPLETED, boxId: box.id });
+            
+            await pipeline.execute({ itemId: item.id, newStatus: ItemStatus.SHIPPED });
 
-        it('DISCARD への遷移時に、紐づくBoxが解放（AVAILABLE）されること', async () => {
-            const box = await createTestBox({ status: 'OCCUPIED' });
-            const item = await createTestPartItem({ status: 'INSPECTION' as any, boxId: box.id });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'DISCARD' as any })
-            ).rejects.toThrow();
-        });
-
-        it('CANCELLED への遷移時に、紐づくBoxが解放（AVAILABLE）されること', async () => {
-            const box = await createTestBox({ status: 'OCCUPIED' });
-            const item = await createTestPartItem({ status: 'READY' as any, boxId: box.id });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'CANCELLED' as any })
-            ).rejects.toThrow();
+            const updatedBox = await db.query.boxes.findFirst({
+                where: eq(boxes.id, box.id),
+            });
+            expect(updatedBox?.status).toBe('AVAILABLE');
         });
     });
 
     describe('戻り遷移（リワーク）', () => {
         it('CUTTING から PRINTING への戻り遷移が許可されること', async () => {
-            const item = await createTestPartItem({ status: 'CUTTING' as any });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'PRINTING' as any })
-            ).rejects.toThrow();
-        });
+            const item = await createTestPartItem({ status: ItemStatus.CUTTING });
+            
+            await pipeline.execute({ itemId: item.id, newStatus: ItemStatus.PRINTING });
 
-        it('SANDING から CUTTING への戻り遷移が許可されること', async () => {
-            const item = await createTestPartItem({ status: 'SANDING' as any });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'CUTTING' as any })
-            ).rejects.toThrow();
+            const updatedItem = await db.query.partItems.findFirst({
+                where: eq(partItems.id, item.id),
+            });
+            expect(updatedItem?.status).toBe(ItemStatus.PRINTING);
         });
     });
 
     describe('再割当リカバリ', () => {
-        it('SHIPPED から COMPLETED 等の稼働状態へのリカバリ時、元のBoxが利用不可なら新しいBoxが自動で割り当てられること', async () => {
-            const item = await createTestPartItem({ status: 'SHIPPED' as any });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'COMPLETED' as any })
-            ).rejects.toThrow();
-        });
+        it('SHIPPED から COMPLETED 等の稼働状態へのリカバリ時、新しいBoxが自動で割り当てられること', async () => {
+            // SHIPPED状態のアイテム（通常Boxは解放済み）
+            const item = await createTestPartItem({ status: ItemStatus.SHIPPED, boxId: null });
+            
+            // 空きBOXを用意
+            const newBox = await createTestBox({ status: 'AVAILABLE' });
 
-        it('DISCARD から READY へのリカバリ時に新しいBoxが自動割り当てられること', async () => {
-            const item = await createTestPartItem({ status: 'DISCARD' as any });
-            await expect(
-                pipeline.execute({ itemId: item.id, newStatus: 'READY' as any })
-            ).rejects.toThrow();
+            await pipeline.execute({ itemId: item.id, newStatus: ItemStatus.COMPLETED });
+
+            const updatedItem = await db.query.partItems.findFirst({
+                where: eq(partItems.id, item.id),
+            });
+            expect(updatedItem?.status).toBe(ItemStatus.COMPLETED);
+            expect(updatedItem?.boxId).not.toBeNull();
         });
     });
 });

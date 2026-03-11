@@ -24,7 +24,7 @@ export const db = drizzle(client, { schema });
 
 // Helper to provide transaction context like MockDbService did
 export const DbService = {
-    transaction: async <T>(cb: (tx: typeof db) => Promise<T>): Promise<T> => {
+    transaction: async <T>(cb: (tx: any) => Promise<T>): Promise<T> => {
         return db.transaction(cb);
     }
 };

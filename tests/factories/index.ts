@@ -1,5 +1,5 @@
-import { db } from '../src/shared/db';
-import { projects, units, parts, boxes, machines, partItems, statusHistory } from '../src/shared/db/schema';
+import { db } from '../../src/shared/db';
+import { projects, units, parts, boxes, machines, partItems, statusHistory } from '../../src/shared/db/schema';
 import { v7 as uuidv7 } from 'uuid';
 import { eq } from 'drizzle-orm';
 

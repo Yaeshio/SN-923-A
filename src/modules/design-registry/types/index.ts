@@ -10,14 +10,14 @@ export interface Project {
 
 export interface Unit {
     id: string;
-    project_id: string;
+    projectId: string;
     name: string;
 }
 
 export interface Part {
     id: string;
-    unit_id: string;
-    part_number: string;
-    stl_url: string;
+    unitId: string;
+    partNumber: string;
+    stlUrl: string;
     status: PartStatus;
 }
