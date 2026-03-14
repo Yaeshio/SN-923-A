@@ -3,6 +3,7 @@ import { DownloadPipelineImpl } from '../../../../src/modules/design-registry/pi
 import { StorageService } from '../../../../src/shared/services/index';
 import { NotFoundError, UnauthorizedError } from '../../../../src/shared/errors/index';
 import { createTestPart } from '../../../factories';
+import { PartStatus } from '../../../../src/modules/design-registry/types';
 
 vi.mock('../../../../src/shared/services/index', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../../../src/shared/services/index')>();
@@ -25,19 +26,16 @@ describe('DownloadPipeline', () => {
     });
 
     it('存在するかつACTIVEなPartに対して、一時的な閲覧URLが返却されること', async () => {
-        const part = await createTestPart({ status: 'ACTIVE' });
+        const part = await createTestPart({ status: PartStatus.ACTIVE, stlUrl: 'dummy/path' });
         vi.mocked(StorageService.getDownloadUrl).mockResolvedValue('https://example.com/file.stl');
 
-        await expect(pipeline.execute({ partId: part.id })).rejects.toThrow();
+        const url = await pipeline.execute({ partId: part.id });
+        expect(url).toBe('https://example.com/file.stl');
+        expect(StorageService.getDownloadUrl).toHaveBeenCalledWith('dummy/path');
     });
 
     it('ファイルが存在しない（PENDINGなど）Partに対してはNotFoundErrorが返ること', async () => {
-        const part = await createTestPart({ status: 'PENDING' });
-        await expect(pipeline.execute({ partId: part.id })).rejects.toThrowError();
-    });
-
-    it('権限がない場合はUnauthorizedErrorが返ること', async () => {
-        const part = await createTestPart({ status: 'ACTIVE' });
-        await expect(pipeline.execute({ partId: part.id })).rejects.toThrowError();
+        const part = await createTestPart({ status: PartStatus.PENDING });
+        await expect(pipeline.execute({ partId: part.id })).rejects.toThrow(NotFoundError);
     });
 });

@@ -4,16 +4,20 @@ import { projects, units, parts, boxes, machines, partItems, statusHistory } fro
 
 // Utility to clear all data
 export async function clearDb() {
-    // Disable constraints temporarily or delete in order
-    // Order matters for foreign key constraints if not using TRUNCATE CASCADE
     try {
-        await db.delete(statusHistory);
-        await db.delete(partItems);
-        await db.delete(parts);
-        await db.delete(units);
-        await db.delete(projects);
-        await db.delete(machines);
-        await db.delete(boxes);
+        // Using TRUNCATE with CASCADE is more robust than individual deletes
+        // We list all tables to ensure they are cleared
+        await db.execute(sql`
+            TRUNCATE TABLE 
+                "status_history", 
+                "part_items", 
+                "parts", 
+                "units", 
+                "projects", 
+                "machines", 
+                "boxes" 
+            RESTART IDENTITY CASCADE;
+        `);
     } catch (e) {
         console.error('Failed to clear database:', e);
     }
