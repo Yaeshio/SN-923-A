@@ -1,6 +1,6 @@
 'use server';
 
-import { safeAction } from '../../../shared/actions/safeAction';
+import { safeAction } from '@/shared/actions/safeAction';
 import { importPartsSchema } from './schemas';
 import { ImportPipelineImpl } from '../pipelines/ImportPipeline';
 import { Part } from '../types';
