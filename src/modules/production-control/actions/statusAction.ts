@@ -1,6 +1,6 @@
 'use server';
 
-import { safeAction } from '../../../shared/actions/safeAction';
+import { safeAction } from '@/shared/actions/safeAction';
 import { updateStatusSchema } from './schemas';
 import { StatusUpdatePipelineImpl } from '../pipelines/StatusUpdatePipeline';
 import { PartItem } from '../types';
