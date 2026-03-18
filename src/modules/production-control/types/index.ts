@@ -23,13 +23,29 @@ export enum ReasonCode {
     ORDER_CANCEL = 'ORDER_CANCEL',
 }
 
+export interface Box {
+    id: string;
+    name: string;
+    status: string;
+}
+
+export interface Part {
+    id: string;
+    partNumber: string;
+    stlUrl?: string | null;
+    status: string;
+}
+
 export interface PartItem {
     id: string;
     partId: string;
     machineId: string;
-    boxId: string;
+    boxId: string | null;
     status: ItemStatus;
     updatedAt: Date;
+    part?: Part;
+    machine?: Machine;
+    box?: Box | null;
 }
 
 export interface Machine {

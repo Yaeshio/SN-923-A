@@ -5,9 +5,10 @@ import { ItemStatus, PartItem } from '../types';
 import { useState } from 'react';
 
 // Client-side PartItem might have updatedAt as string
-type ClientPartItem = Omit<PartItem, 'updatedAt'> & { updatedAt: any };
-
 import { Box, Cpu, History, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+
+// Client-side PartItem might have updatedAt as string or Date
+type ClientPartItem = Omit<PartItem, 'updatedAt'> & { updatedAt: string | Date };
 
 export function StatusBoard({ initialItems }: { initialItems: any[] }) {
     const [items, setItems] = useState<ClientPartItem[]>(initialItems);
@@ -50,7 +51,7 @@ export function StatusBoard({ initialItems }: { initialItems: any[] }) {
                                         <History className="h-3 w-3" />
                                         <span>{item.id.slice(0, 8)}</span>
                                     </div>
-                                    <h3 className="font-bold text-xl tracking-tight">Part {item.partId.slice(0, 8)}</h3>
+                                    <h3 className="font-bold text-xl tracking-tight">{item.part?.partNumber || `Part ${item.partId.slice(0, 8)}`}</h3>
                                 </div>
                                 <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                                     item.status === ItemStatus.COMPLETED ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
@@ -68,14 +69,18 @@ export function StatusBoard({ initialItems }: { initialItems: any[] }) {
                                         <Cpu className="h-3 w-3" />
                                         <span className="text-[10px] font-bold uppercase">Machine</span>
                                     </div>
-                                    <span className="text-sm font-medium block truncate">{item.machineId.slice(0, 8)}</span>
+                                    <span className="text-sm font-medium block truncate" title={item.machine?.name || item.machineId}>
+                                        {item.machine?.name || item.machineId.slice(0, 8)}
+                                    </span>
                                 </div>
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-1 text-muted-foreground">
                                         <Box className="h-3 w-3" />
                                         <span className="text-[10px] font-bold uppercase">Box</span>
                                     </div>
-                                    <span className="text-sm font-medium block truncate">{item.boxId ? item.boxId.slice(0, 8) : '--'}</span>
+                                    <span className="text-sm font-medium block truncate" title={item.box?.name || item.boxId || ''}>
+                                        {item.box?.name || (item.boxId ? item.boxId.slice(0, 8) : '--')}
+                                    </span>
                                 </div>
                             </div>
 

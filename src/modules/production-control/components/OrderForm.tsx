@@ -4,7 +4,7 @@ import { createOrderAction } from '../actions/orderAction';
 import { useState } from 'react';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
 
-export function OrderForm() {
+export function OrderForm({ parts, machines }: { parts: any[], machines: any[] }) {
     const [status, setStatus] = useState<string>('');
     const [isPending, setIsPending] = useState(false);
     const [error, setError] = useState<string>('');
@@ -43,26 +43,32 @@ export function OrderForm() {
             <h2 className="text-2xl font-bold mb-6 tracking-tight">製造オーダー発行</h2>
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
-                    <label className="text-sm font-medium leading-none">部品ID (Part ID)</label>
-                    <input 
+                    <label className="text-sm font-medium leading-none">部品 (Part)</label>
+                    <select 
                         name="partId" 
-                        type="text" 
                         required 
                         disabled={isPending}
-                        placeholder="Part IDを入力"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
-                    />
+                    >
+                        <option value="">部品を選択してください</option>
+                        {parts.map(p => (
+                            <option key={p.id} value={p.id}>{p.partNumber}</option>
+                        ))}
+                    </select>
                 </div>
                 <div className="space-y-2">
-                    <label className="text-sm font-medium leading-none">製造機ID (Machine ID)</label>
-                    <input 
+                    <label className="text-sm font-medium leading-none">製造機 (Machine)</label>
+                    <select 
                         name="machineId" 
-                        type="text" 
                         required 
                         disabled={isPending}
-                        placeholder="Machine IDを入力"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
-                    />
+                    >
+                        <option value="">製造機を選択してください</option>
+                        {machines.map(m => (
+                            <option key={m.id} value={m.id}>{m.name} ({m.type})</option>
+                        ))}
+                    </select>
                 </div>
                 <div className="space-y-2">
                     <label className="text-sm font-medium leading-none">個数 (Quantity)</label>

@@ -7,6 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function BoardPage() {
     const items = await db.query.partItems.findMany({
+        with: {
+            part: true,
+            machine: true,
+            box: true,
+        },
         orderBy: [desc(partItems.updatedAt)],
         limit: 50
     });

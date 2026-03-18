@@ -1,6 +1,18 @@
 import { OrderForm } from "@/modules/production-control/components/OrderForm";
+import { db } from "@/shared/db";
+import { parts, machines } from "@/shared/db/schema";
+import { asc } from "drizzle-orm";
 
-export default function OrderPage() {
+export default async function OrderPage() {
+    const [partsList, machinesList] = await Promise.all([
+        db.query.parts.findMany({
+            orderBy: [asc(parts.partNumber)]
+        }),
+        db.query.machines.findMany({
+            orderBy: [asc(machines.name)]
+        })
+    ]);
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-2">
@@ -10,7 +22,7 @@ export default function OrderPage() {
                 </p>
             </div>
             <div className="grid gap-6">
-                <OrderForm />
+                <OrderForm parts={partsList} machines={machinesList} />
             </div>
         </div>
     );

@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, varchar, pgEnum, uuid } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { sql, relations } from 'drizzle-orm';
 
 // Enums
 export const partStatusEnum = pgEnum('part_status', ['PENDING', 'ACTIVE']);
@@ -27,6 +27,14 @@ export const parts = pgTable('parts', {
     status: partStatusEnum('status').notNull().default('PENDING'),
 });
 
+export const partsRelations = relations(parts, ({ one, many }) => ({
+    unit: one(units, {
+        fields: [parts.unitId],
+        references: [units.id],
+    }),
+    partItems: many(partItems),
+}));
+
 export const boxes = pgTable('boxes', {
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 255 }).notNull(),
@@ -48,6 +56,21 @@ export const partItems = pgTable('part_items', {
     status: itemStatusEnum('status').notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const partItemsRelations = relations(partItems, ({ one }) => ({
+    part: one(parts, {
+        fields: [partItems.partId],
+        references: [parts.id],
+    }),
+    machine: one(machines, {
+        fields: [partItems.machineId],
+        references: [machines.id],
+    }),
+    box: one(boxes, {
+        fields: [partItems.boxId],
+        references: [boxes.id],
+    }),
+}));
 
 export const statusHistory = pgTable('status_history', {
     id: uuid('id').primaryKey().defaultRandom(),
