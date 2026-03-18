@@ -13,7 +13,7 @@
         - ファイル名から `part_number` を抽出。
         - DBに `status: "PENDING"` で `Part` レコードを作成し、一意のIDを確保。
     2. **ストレージ保存**: 
-        - 確保したIDをディレクトリ構造やファイル名に含めて Firebase Storage へアップロード（例: `parts/{id}/file.stl`）。
+        - 確保したIDをディレクトリ構造やファイル名に含めて Supabase Storage へアップロード（例: `parts/{id}/file.stl`）。
     3. **本登録 (Activate)**: 
         - アップロード成功を受けて、DBの `stl_url` を更新し、`status: "ACTIVE"` に変更。
     4. **クリーンアップ (非同期/エラー時)**:

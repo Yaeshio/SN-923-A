@@ -16,7 +16,7 @@ flowchart LR
         StatusLogic["ステータス更新処理<br>(履歴保存)"]
         DownloadLogic["署名付きURL発行処理<br>(DL管理)"]
   end
- subgraph DB["DB層 (Neon / Postgres)"]
+ subgraph DB["DB層 (Supabase / Postgres)"]
         Unit["Unit"]
         Project["Project"]
         Part["Part<br>(stl_url保持)"]
@@ -26,7 +26,7 @@ flowchart LR
         Machine["Machine<br>(造形機マスタ)"]
   end
  subgraph External["外部リソース"]
-        Storage["Firebase Storage<br>(STLファイル)"]
+        Storage["Supabase Storage<br>(STLファイル)"]
   end
     Project --- Unit
     Unit --- Part

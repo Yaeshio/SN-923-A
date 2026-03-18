@@ -1,20 +1,14 @@
-export interface MockStorageService {
-    uploadFile(file: any, path: string): Promise<string>;
-    getDownloadUrl(path: string): Promise<string>;
-    deleteFile(path: string): Promise<void>;
-}
+export * from './StorageService';
 
 export interface MockDbService {
-    transaction<T>(cb: () => Promise<T>): Promise<T>;
+    transaction<T>(cb: (tx: any) => Promise<T>): Promise<T>;
 }
 
-// Just empty definitions for tests to mock against
-export const StorageService: MockStorageService = {
-    uploadFile: async () => '',
-    getDownloadUrl: async () => '',
-    deleteFile: async () => { },
-};
-
+// Helper to provide transaction context like MockDbService did
 export const DbService: MockDbService = {
-    transaction: async (cb) => cb(),
+    transaction: async (cb) => {
+        // In real implementation, this would be db.transaction
+        // Since we have a real DB client now, we can use it or keep this as a shim
+        return cb(null as any); 
+    },
 };

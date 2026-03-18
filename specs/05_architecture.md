@@ -46,13 +46,14 @@ src/
 
 - **Frontend**: Next.js (App Router), Tailwind CSS
 - **UI Components**: Shadcn/UI (Radix UI)
-- **Database**: Neon (Serverless Postgres)
-- **ORM**: Drizzle ORM (Neon との相性が良く、サーバーレス環境で軽量に動作するため)
+- **Database**: Supabase (PostgreSQL)
+- **ORM**: Drizzle ORM (Supabase との相性が良く、軽量に動作するため)
 - **Deployment**: Vercel
-- **Storage**: Firebase Storage (STLファイル管理)
+- **Storage**: Supabase Storage (STLファイル管理)
+- **Authentication**: Supabase Auth (ユーザー認証)
 - **Validation**: Zod
 
 ## 5. 開発・デプロイフロー
-- **データベース管理**: Neon Studio を使用し、開発用ブランチと本番用ブランチを分離する。
+- **データベース管理**: Supabase Dashboard / Supabase CLI を使用し、開発用環境（ローカル）と本番用プロジェクトを分離する。
 - **本番反映**: Vercel の Preview Deployment を活用し、性能・動作検証後に本番ブランチへマージする。
-- **環境差異**: `.env.local` (開発用) と Vercel Environment Variables (本番用) で接続先を切り替える。
+- **環境差異**: `.env.local` (開発用) と Vercel Environment Variables (本番用) で Supabase の接続先（URL、Anon Key、DB URL）を切り替える。

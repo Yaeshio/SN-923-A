@@ -14,7 +14,7 @@ async function wait(ms: number) {
 }
 
 async function ensureDbRunning() {
-    const containerName = 'neon-local-vitest';
+    const containerName = 'supabase-local-vitest';
     console.log('Ensuring test database is running...');
 
     try {
