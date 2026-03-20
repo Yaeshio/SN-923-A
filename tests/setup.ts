@@ -7,7 +7,7 @@ import path from 'path';
 // Pre-load environment variables to ensure tools using them have access
 dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
 
-process.env.NODE_ENV = 'test';
+// process.env.NODE_ENV = 'test';
 
 async function wait(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));

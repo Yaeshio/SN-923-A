@@ -1,0 +1,29 @@
+.next/dev/types/validator.ts(69,39): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/app/page.tsx' is not a module.
+.next/dev/types/validator.ts(78,39): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/app/parts/[id]/page.tsx' is not a module.
+.next/dev/types/validator.ts(87,39): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/app/projects/[id]/units/page.tsx' is not a module.
+.next/dev/types/validator.ts(96,39): error TS2307: Cannot find module '../../../src/app/projects/page.js' or its corresponding type declarations.
+src/app/board/page.tsx(2,27): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/app/import/page.tsx(1,28): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/modules/design-registry/components/ImportForm.tsx' is not a module.
+src/app/order/page.tsx(1,27): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/modules/production-control/components/OrderForm.tsx' is not a module.
+src/app/order/page.tsx(3,33): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/modules/design-registry/actions/importAction.ts(4,35): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/modules/design-registry/actions/schemas.ts' is not a module.
+src/modules/design-registry/actions/importAction.ts(27,28): error TS18046: 'input' is of type 'unknown'.
+src/modules/design-registry/actions/importAction.ts(28,25): error TS18046: 'input' is of type 'unknown'.
+src/modules/design-registry/actions/importAction.ts(29,24): error TS18046: 'input' is of type 'unknown'.
+src/modules/design-registry/pipelines/DownloadPipeline.ts(2,23): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/modules/design-registry/pipelines/ImportPipeline.ts(3,23): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/modules/design-registry/pipelines/ImportPipeline.ts(28,43): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/modules/production-control/components/StatusBoard.tsx(10,33): error TS2724: '"lucide-react"' has no exported member named 'Selection'. Did you mean 'Section'?
+src/modules/production-control/components/StatusBoard.tsx(101,75): error TS2783: 'status' is specified more than once, so this usage will be overwritten.
+src/modules/production-control/pipelines/OrderPipeline.ts(12,42): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/modules/production-control/pipelines/StatusUpdatePipeline.ts(5,27): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/modules/production-control/services/PartItemService.ts(2,49): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/modules/production-control/services/StorageLogisticsService.ts(2,23): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/shared/db/index.ts(3,25): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+src/shared/db/seed.ts(2,25): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+tests/factories/index.ts(2,83): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+tests/modules/design-registry/pipelines/ImportPipeline.test.ts(6,23): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+tests/modules/production-control/pipelines/OrderPipeline.test.ts(6,49): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+tests/modules/production-control/pipelines/StatusUpdatePipeline.test.ts(6,49): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
+tests/setup.ts(10,13): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+tests/utils/db.ts(3,83): error TS2306: File '/home/yrn-dock/dev/SN-923-A/src/shared/db/schema.ts' is not a module.
