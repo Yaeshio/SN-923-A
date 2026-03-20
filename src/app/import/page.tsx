@@ -1,6 +1,7 @@
 import { ImportForm } from "@/modules/design-registry/components/ImportForm";
 
-export default function ImportPage() {
+export default async function ImportPage({ searchParams }: { searchParams: Promise<{ projectId?: string }> }) {
+    const { projectId } = await searchParams;
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-2">
@@ -10,7 +11,7 @@ export default function ImportPage() {
                 </p>
             </div>
             <div className="grid gap-6">
-                <ImportForm />
+                <ImportForm defaultProjectId={projectId} />
             </div>
         </div>
     );

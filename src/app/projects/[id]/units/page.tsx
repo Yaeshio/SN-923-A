@@ -1,3 +1,4 @@
-export default function UnitsPage({ params }: { params: { id: string } }) {
-  return <div>Units for Project: {params.id}</div>;
+export default async function UnitsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <div>Units for Project: {id}</div>;
 }

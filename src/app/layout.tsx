@@ -38,18 +38,7 @@ export default function RootLayout({
               <span className="font-bold tracking-tight text-lg">SN-923 System</span>
             </div>
             <nav className="flex items-center gap-6 text-sm font-medium ml-4">
-              <a href="/import" className="flex items-center gap-1 transition-colors hover:text-primary">
-                <FileUp className="h-4 w-4" />
-                <span>インポート</span>
-              </a>
-              <a href="/order" className="flex items-center gap-1 transition-colors hover:text-primary">
-                <FilePlus className="h-4 w-4" />
-                <span>製造指示</span>
-              </a>
-              <a href="/board" className="flex items-center gap-1 transition-colors hover:text-primary">
-                <LayoutDashboard className="h-4 w-4" />
-                <span>工程ボード</span>
-              </a>
+              {/* Navigation will be project-specific */}
             </nav>
           </div>
         </header>

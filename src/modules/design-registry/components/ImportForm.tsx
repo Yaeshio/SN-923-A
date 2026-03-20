@@ -4,7 +4,7 @@ import { importPartsAction } from '../actions/importAction';
 import { useState } from 'react';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
 
-export function ImportForm() {
+export function ImportForm({ defaultProjectId }: { defaultProjectId?: string }) {
     const [status, setStatus] = useState<string>('');
     const [isPending, setIsPending] = useState(false);
     const [error, setError] = useState<string>('');
@@ -45,6 +45,7 @@ export function ImportForm() {
                         required 
                         disabled={isPending}
                         placeholder="Project IDを入力"
+                        defaultValue={defaultProjectId}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
                     />
                 </div>

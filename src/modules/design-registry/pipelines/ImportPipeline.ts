@@ -17,12 +17,17 @@ export interface ImportPipeline {
 export class ImportPipelineImpl implements ImportPipeline {
     async execute(input: ImportInput): Promise<Part[]> {
         // 1. Create PENDING records
-        const newParts = input.files.map((file, index) => ({
-            unitId: input.unitId,
-            partNumber: `PN-${Date.now()}-${index}`,
-            status: PartStatus.PENDING,
-            stlUrl: '', // To be updated
-        }));
+        const newParts = input.files.map((file, index) => {
+            const fileName = (file as File).name || `PN-${Date.now()}-${index}`;
+            const partNumber = fileName.replace(/\.[^/.]+$/, ""); // Strip extension
+            
+            return {
+                unitId: input.unitId,
+                partNumber: partNumber,
+                status: PartStatus.PENDING,
+                stlUrl: '', // To be updated
+            };
+        });
 
         const insertedParts = await db.insert(parts).values(newParts).returning();
         const partIds = insertedParts.map(p => p.id);

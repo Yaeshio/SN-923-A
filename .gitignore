@@ -58,3 +58,7 @@ repomix-output.xml
 
 # Drizzle
 /drizzle/.drizzle
+
+# Supabase status files
+status.json
+supabase_status.txt
