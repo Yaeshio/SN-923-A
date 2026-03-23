@@ -46,6 +46,7 @@
         - `HistoryService` により、`reason_code` と `comment` を含む詳細な履歴を保存。
 
 ### 1.4 ダウンロードURL発行パイプライン (`DownloadPipeline`)
+- **利用箇所**: 工程管理ボード（`BoardUI`）の各工程カード上のダウンロードボタン、および部品詳細画面（`DetailUI`）。
 - **入力**: `partId: string`
 - **ステップ**:
     1. 部品のアクセス権限（存在確認）チェック。
