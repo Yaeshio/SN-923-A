@@ -17,7 +17,8 @@ export const metadata: Metadata = {
   description: "SN-923 Manufacturing Process Control",
 };
 
-import { FileUp, FilePlus, LayoutDashboard, Factory } from "lucide-react";
+import { FileUp, FilePlus, LayoutDashboard, Factory, Settings } from "lucide-react";
+import Link from "next/link";
 
 export default function RootLayout({
   children,
@@ -38,7 +39,14 @@ export default function RootLayout({
               <span className="font-bold tracking-tight text-lg">SN-923 System</span>
             </div>
             <nav className="flex items-center gap-6 text-sm font-medium ml-4">
-              {/* Navigation will be project-specific */}
+              <Link href="/projects" className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground">
+                <LayoutDashboard className="h-4 w-4" />
+                <span>プロジェクト</span>
+              </Link>
+              <Link href="/master" className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground">
+                <Settings className="h-4 w-4" />
+                <span>マスタ管理</span>
+              </Link>
             </nav>
           </div>
         </header>
