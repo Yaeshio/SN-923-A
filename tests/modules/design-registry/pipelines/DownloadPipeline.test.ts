@@ -31,7 +31,7 @@ describe('DownloadPipeline', () => {
 
         const url = await pipeline.execute({ partId: part.id });
         expect(url).toBe('https://example.com/file.stl');
-        expect(StorageService.getDownloadUrl).toHaveBeenCalledWith('dummy/path');
+        expect(StorageService.getDownloadUrl).toHaveBeenCalledWith('dummy/path', part.partNumber);
     });
 
     it('ファイルが存在しない（PENDINGなど）Partに対してはNotFoundErrorが返ること', async () => {

@@ -27,7 +27,7 @@ export class DownloadPipelineImpl implements DownloadPipeline {
             throw new NotFoundError(`STL URL not found for part: ${input.partId}`);
         }
 
-        const url = await StorageService.getDownloadUrl(part.stlUrl);
+        const url = await StorageService.getDownloadUrl(part.stlUrl, part.partNumber);
         return url;
     }
 }

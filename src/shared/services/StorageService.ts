@@ -12,17 +12,15 @@ export const StorageService = {
       throw error;
     }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('stl-files')
-      .getPublicUrl(path);
-
-    return publicUrl;
+    return data.path;
   },
 
-  getDownloadUrl: async (path: string): Promise<string> => {
+  getDownloadUrl: async (path: string, downloadName?: string): Promise<string> => {
     const { data, error } = await supabase.storage
       .from('stl-files')
-      .createSignedUrl(path, 3600); // 1 hour
+      .createSignedUrl(path, 3600, {
+        download: downloadName ? `${downloadName}.stl` : undefined,
+      }); // 1 hour
 
     if (error) {
       throw error;

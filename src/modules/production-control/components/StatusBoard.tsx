@@ -1,13 +1,15 @@
 'use client';
 
 import { updateStatusAction } from '../actions/statusAction';
+import { downloadStlAction } from '@/modules/design-registry/actions/downloadAction';
 import { ItemStatus } from '../types';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Box, Cpu, History, Loader2, AlertCircle, CheckCircle2, 
   LayoutDashboard, Table as TableIcon, Filter, Search, 
   ChevronDown, ArrowUpDown, Trash2, Send, Check, X,
-  ExternalLink, MoreHorizontal, CheckSquare, Square
+  ExternalLink, MoreHorizontal, CheckSquare, Square,
+  Download
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { supabase } from '@/shared/lib/supabase';
@@ -31,6 +33,7 @@ export function StatusBoard({ initialItems }: { initialItems: any[] }) {
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
   // Sync state when initialItems change (prop synchronization)
@@ -109,6 +112,23 @@ export function StatusBoard({ initialItems }: { initialItems: any[] }) {
       setShowReasonModal(null);
       setReasonCode('');
       setComment('');
+    }
+  };
+
+  const handleDownload = async (partId: string) => {
+    if (!partId) return;
+    setDownloadingId(partId);
+    try {
+      const result = await downloadStlAction({ partId });
+      if (result.success) {
+        window.open(result.data, '_blank');
+      } else {
+        alert(result.error || 'ダウンロードURLの取得に失敗しました。');
+      }
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -251,7 +271,24 @@ export function StatusBoard({ initialItems }: { initialItems: any[] }) {
                                   </div>
 
                                   <div className="flex items-center justify-between text-[8px] font-bold text-gray-400 pt-1 border-t border-gray-50">
-                                    <span suppressHydrationWarning>{new Date(item.updatedAt).toLocaleTimeString('ja-JP')}</span>
+                                    <div className="flex items-center gap-3">
+                                      <span suppressHydrationWarning>{new Date(item.updatedAt).toLocaleTimeString('ja-JP')}</span>
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDownload(item.partId);
+                                        }}
+                                        disabled={downloadingId === item.partId}
+                                        className="flex items-center gap-1 text-indigo-500 hover:text-indigo-700 transition-colors disabled:opacity-50"
+                                      >
+                                        {downloadingId === item.partId ? (
+                                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                        ) : (
+                                          <Download className="h-2.5 w-2.5" />
+                                        )}
+                                        <span>STL DL</span>
+                                      </button>
+                                    </div>
                                     <div className="flex items-center gap-1">
                                       <History className="h-2.5 w-2.5" />
                                       <span>履歴</span>
