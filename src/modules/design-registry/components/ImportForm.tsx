@@ -4,7 +4,18 @@ import { importPartsAction } from '../actions/importAction';
 import { useState } from 'react';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
 
-export function ImportForm({ defaultProjectId }: { defaultProjectId?: string }) {
+interface ImportFormProps {
+    project: {
+        id: string;
+        name: string;
+    };
+    units: {
+        id: string;
+        name: string;
+    }[];
+}
+
+export function ImportForm({ project, units }: ImportFormProps) {
     const [status, setStatus] = useState<string>('');
     const [isPending, setIsPending] = useState(false);
     const [error, setError] = useState<string>('');
@@ -37,29 +48,39 @@ export function ImportForm({ defaultProjectId }: { defaultProjectId?: string }) 
         <div className="max-w-md mx-auto p-8 bg-card text-card-foreground rounded-xl border shadow-lg">
             <h2 className="text-2xl font-bold mb-6 tracking-tight">STLファイルをインポート</h2>
             <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Hidden input to ensure projectId is sent */}
+                <input type="hidden" name="projectId" value={project.id} />
+
                 <div className="space-y-2">
-                    <label className="text-sm font-medium leading-none">プロジェクトID</label>
-                    <input 
-                        name="projectId" 
-                        type="text" 
-                        required 
-                        disabled={isPending}
-                        placeholder="Project IDを入力"
-                        defaultValue={defaultProjectId}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
-                    />
+                    <label className="text-sm font-medium leading-none">プロジェクト</label>
+                    <div className="flex h-10 w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground ring-offset-background cursor-not-allowed">
+                        {project.name}
+                    </div>
                 </div>
+
                 <div className="space-y-2">
-                    <label className="text-sm font-medium leading-none">ユニットID</label>
-                    <input 
+                    <label className="text-sm font-medium leading-none" htmlFor="unitId">対象ユニット</label>
+                    <select 
+                        id="unitId"
                         name="unitId" 
-                        type="text" 
                         required 
                         disabled={isPending}
-                        placeholder="Unit IDを入力"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
-                    />
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <option value="">ユニットを選択してください</option>
+                        {units.map((unit) => (
+                            <option key={unit.id} value={unit.id}>
+                                {unit.name}
+                            </option>
+                        ))}
+                    </select>
+                    {units.length === 0 && (
+                        <p className="text-xs text-destructive mt-1">
+                            このプロジェクトにはユニットが登録されていません。
+                        </p>
+                    )}
                 </div>
+
                 <div className="space-y-2">
                     <label className="text-sm font-medium leading-none">STLファイル</label>
                     <input 
@@ -71,9 +92,10 @@ export function ImportForm({ defaultProjectId }: { defaultProjectId?: string }) 
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
                     />
                 </div>
+
                 <button 
                     type="submit" 
-                    disabled={isPending}
+                    disabled={isPending || units.length === 0}
                     className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
                 >
                     {isPending ? (
