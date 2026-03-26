@@ -40,7 +40,7 @@ export default function LandingPageBody() {
                 />
                 <img 
                   className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[85%] rounded-xl shadow-lg border border-white/20"
-                  src="https://placehold.co/449x239" 
+                  src="/lp/images/landing/hero-product.png" 
                   alt="Product Screenshot"
                 />
                 <div className="absolute bottom-6 left-6 right-6 p-6 bg-white/70 backdrop-blur-xl rounded-xl border border-white/30 shadow-sm">
@@ -143,10 +143,10 @@ export default function LandingPageBody() {
                   </li>
                 </ul>
               </div>
-              <div className="mt-auto aspect-video">
+              <div className="mt-auto px-8 pb-8">
                 <img 
-                  className="w-full h-full object-cover"
-                  src="https://placehold.co/547x220" 
+                  className="w-full aspect-video object-cover rounded-xl shadow-sm"
+                  src="/lp/images/landing/models-design.png" 
                   alt="Design data management" 
                 />
               </div>
@@ -247,7 +247,7 @@ export default function LandingPageBody() {
                 >
                   <img 
                     className="w-[90%] mx-auto mt-20 rounded-xl shadow-2xl"
-                    src="https://placehold.co/459x233" 
+                    src="/lp/images/landing/field-device.png" 
                     alt="Device representation" 
                   />
                 </div>
