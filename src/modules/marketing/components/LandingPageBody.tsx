@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 
 export default function LandingPageBody() {
   return (
@@ -21,9 +22,9 @@ export default function LandingPageBody() {
                 設計データと実製作のギャップを埋める、BOM中心の工程管理システム。現代の工場のために設計された精密なプロセス管理を実現。
               </p>
               <div className="flex flex-wrap gap-4 pt-4">
-                <button className="px-8 py-4 bg-gradient-to-br from-black to-[#141B2C] text-white text-lg font-bold rounded-lg shadow-lg hover:opacity-90 transition-opacity">
+                <Link href="/projects" className="px-8 py-4 bg-gradient-to-br from-black to-[#141B2C] text-white text-lg font-bold rounded-lg shadow-lg hover:opacity-90 transition-opacity">
                   今すぐ始める
-                </button>
+                </Link>
                 <button className="flex items-center gap-2 px-8 py-4 bg-[#E6E8EA] text-black text-lg font-bold rounded-lg hover:bg-gray-200 transition-colors">
                   <div className="w-5 h-5 bg-black rounded-sm" />
                   デモを見る
@@ -267,9 +268,9 @@ export default function LandingPageBody() {
             ロジックのスピードで進化する次世代のメーカーに加わりましょう。今すぐ無料トライアルを開始してください。
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <button className="px-10 py-4 bg-white text-black text-xl font-bold rounded-xl hover:bg-gray-100 transition-colors shadow-lg">
+            <Link href="/projects" className="px-10 py-4 bg-white text-black text-xl font-bold rounded-xl hover:bg-gray-100 transition-colors shadow-lg">
               今すぐ始める
-            </button>
+            </Link>
             <button className="px-10 py-4 bg-transparent text-white text-xl font-bold rounded-xl border border-white/20 hover:bg-white/5 transition-colors">
               営業担当に相談する
             </button>
