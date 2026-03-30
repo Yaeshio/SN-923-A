@@ -3,6 +3,8 @@ import { db } from "@/shared/db";
 import { parts, machines, units } from "@/shared/db/schema";
 import { asc, eq, inArray } from "drizzle-orm";
 
+export const dynamic = 'force-dynamic';
+
 export default async function OrderPage({ searchParams }: { searchParams: Promise<{ projectId?: string }> }) {
     const { projectId } = await searchParams;
     let partsWhere = undefined;

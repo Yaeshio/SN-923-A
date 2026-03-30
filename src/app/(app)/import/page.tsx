@@ -3,6 +3,8 @@ import { getProjectWithUnits } from "@/modules/design-registry/actions/projectAc
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function ImportPage({ searchParams }: { searchParams: Promise<{ projectId?: string }> }) {
     const { projectId } = await searchParams;
 

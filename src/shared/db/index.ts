@@ -4,21 +4,16 @@ import * as schema from './schema';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
 
-// Load appropriate .env file based on environment
-const envFile = process.env.NODE_ENV === 'test' ? '.env.test' : '.env.local';
-dotenv.config({ path: resolve(process.cwd(), envFile) });
-
+// DATABASE_URL is required for database operations.
 const connectionString = process.env.DATABASE_URL;
 
-if (!connectionString) {
-    if (process.env.NODE_ENV === 'test') {
-        console.warn('DATABASE_URL is missing in test environment. Make sure to set it.');
-    } else {
-        throw new Error('DATABASE_URL is not set');
-    }
+if (!connectionString && process.env.NODE_ENV !== 'test') {
+    // In Next.js build phase, DATABASE_URL might be missing.
+    // We only log a warning instead of throwing to allow the build to complete.
+    console.warn('DATABASE_URL is not set. Database connection will fail when accessed.');
 }
 
-// In test environment, we might use a dummy URL before initialization, so handle gracefully
+// In environment where connection string is missing (like build time), use a dummy URL to prevent postgres-js from crashing on initialization
 export const client = postgres(connectionString || 'postgres://dummy:dummy@localhost:5432/dummy');
 export const db = drizzle(client, { schema });
 
