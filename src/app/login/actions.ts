@@ -23,7 +23,7 @@ export async function login(formData: FormData) {
     return { error: 'ログインに失敗しました。認証情報を確認してください' }
   }
 
-  redirect('/') // Redirect to protected application area
+  redirect('/projects') // Redirect to protected application area
 }
 
 export async function logout() {

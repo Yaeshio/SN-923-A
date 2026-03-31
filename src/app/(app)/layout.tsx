@@ -1,5 +1,6 @@
-import { FileUp, FilePlus, LayoutDashboard, Factory, Settings } from "lucide-react";
+import { FileUp, FilePlus, LayoutDashboard, Factory, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
+import { logout } from "@/app/login/actions";
 
 export default function AppLayout({
   children,
@@ -26,6 +27,17 @@ export default function AppLayout({
               <span>マスタ管理</span>
             </Link>
           </nav>
+          <div className="ml-auto flex items-center">
+            <form action={logout}>
+              <button
+                type="submit"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors hover:bg-muted rounded-md"
+              >
+                <LogOut className="h-4 w-4 text-muted-foreground" />
+                <span>ログアウト</span>
+              </button>
+            </form>
+          </div>
         </div>
       </header>
       <main className="container mx-auto py-8 px-4">
