@@ -5,58 +5,94 @@ config:
 ---
 flowchart LR
  subgraph UI["UI層 (Next.js App)"]
+        AssemblyUI["アセンブリ一覧・詳細<br>(改訂登録・DL)"]
         ImportUI["インポート画面<br>(設計登録)"]
-        OrderUI["製造指示画面<br>(指示発行)"]
-        BoardUI["工程管理ボード<br>(ステータス操作)"]
-        DetailUI["部品詳細・DL画面<br>(ファイル取得)"]
+        PrintDataUI["プリントデータ登録画面"]
+        JobUI["ジョブ管理画面<br>(作成・結果記録・DL)"]
+        YieldUI["歩留まり画面"]
+        MasterUI["マスタ管理画面<br>(プリンタ状態の変更)"]
   end
- subgraph Logic["ロジック層 (Server Actions / API)"]
-        ImportLogic["インポート処理<br>(BOM登録)"]
-        OrderLogic["製造実行処理<br>(個体生成)"]
-        StatusLogic["ステータス更新処理<br>(履歴保存)"]
-        DownloadLogic["署名付きURL発行処理<br>(DL管理)"]
+ subgraph Logic["ロジック層 (Server Actions / Pipeline)"]
+        ImportLogic["ImportPipeline<br>(パーツ＋初期インスタンス登録)"]
+        RevisionLogic["PartInstanceRegistrationPipeline<br>(改訂登録)"]
+        PrintDataLogic["PrintDataRegistrationPipeline<br>(転記・登録)"]
+        JobLogic["PrintJobCreationPipeline<br>(ジョブ作成)"]
+        ResultLogic["JobResultRecordingPipeline<br>(結果記録)"]
+        YieldLogic["YieldQuery<br>(歩留まり集計)"]
+        DownloadLogic["DownloadPipeline<br>(署名付きURL発行)"]
+        PrinterLogic["PrinterStatusPipeline<br>(状態の手動変更)"]
   end
  subgraph DB["DB層 (Supabase / Postgres)"]
-        Unit["Unit"]
-        Project["Project"]
-        Part["Part<br>(stl_url保持)"]
-        PartItem["PartItem<br>(status保持)"]
-        History["StatusHistory<br>(変更ログ)"]
-        Box["Boxマスタ"]
-        Machine["Machine<br>(造形機マスタ)"]
+    subgraph Design["設計側"]
+        Assembly["assemblies"]
+        Part["parts<br>(model_url・必要数)"]
+        PartInstance["part_instances<br>(改訂・instance_url)"]
+    end
+    subgraph Production["製造側"]
+        PrintData["print_data<br>(print_data_url)"]
+        ModelList["model_list_items<br>(転記・行ごとに新規UUID)"]
+        PrintJob["print_jobs"]
+        PrintResult["print_results<br>(成功数・失敗数)"]
+    end
+    subgraph MasterT["マスタ"]
+        Printer["printers<br>(status)"]
+        Resin["resins"]
+        Film["films"]
+    end
   end
  subgraph External["外部リソース"]
-        Storage["Supabase Storage<br>(STLファイル)"]
+        Storage["Supabase Storage<br>(STL・プリントデータ)"]
   end
-    Project --- Unit
-    Unit --- Part
-    Part -. 生成 .-> PartItem
-    PartItem --- History & Box
-    PartItem --- Machine
-    BoardUI -- ドラッグ&ドロップ等 --> StatusLogic
-    StatusLogic -- Update status --> PartItem
-    StatusLogic -- Insert record --> History
-    StatusLogic -- "Release Box<br>(if Discard/Shipped)" --> Box
-    DetailUI -- DLリクエスト --> DownloadLogic
-    DownloadLogic -- URLリクエスト --> Storage
-    Storage -- 一時的な閲覧URL --> DetailUI
-    ImportUI --> ImportLogic
-    ImportLogic -- 部品番号 --> Part
-    OrderUI --> OrderLogic
-    OrderLogic --> PartItem
-    ImportLogic -- STLファイル --> Storage
-    n1["STLファイル"] --> ImportUI
-    Part -- 部品名を取得 --> OrderLogic
-    History -- ステータスを取得 --> StatusLogic
-    StatusLogic -- カンバンボードなどに反映 --> BoardUI
-    DownloadLogic --> DetailUI
+    Assembly --- Part
+    Part -- 派生 --- PartInstance
+    PrintData --- ModelList
+    PrintData --- PrintJob
+    PrintJob --- PrintResult
+    ModelList --- PrintResult
+    Printer --- PrintJob
+    Resin --- PrintJob
+    Film --- PrintJob
+    PartInstance -. "転記 (FKなし)" .-> ModelList
 
-    n1@{ shape: text}
-     n1:::Ash
-    classDef Aqua stroke-width:1px, stroke-dasharray:none, stroke:#46EDC8, fill:#DEFFF8, color:#378E7A
-    classDef Ash stroke-width:1px, stroke-dasharray:none, stroke:#999999, fill:#EEEEEE, color:#000000
-    style BoardUI fill:#fff9c4,stroke:#fbc02d
-    style DetailUI fill:#fff9c4,stroke:#fbc02d
-    style StatusLogic fill:#fff9c4,stroke:#fbc02d
-    style DownloadLogic fill:#fff9c4,stroke:#fbc02d
-    style History fill:#f1f8e9,stroke:#33691e
+    ImportUI --> ImportLogic
+    ImportLogic -- "Part + 改訂1" --> Part
+    ImportLogic --> PartInstance
+    ImportLogic -- STLファイル --> Storage
+
+    AssemblyUI --> RevisionLogic
+    RevisionLogic -- "改訂を追記" --> PartInstance
+    RevisionLogic -- 修正後データ --> Storage
+
+    PrintDataUI --> PrintDataLogic
+    PartInstance -- "インスタンスを読み取り" --> PrintDataLogic
+    PrintDataLogic --> PrintData
+    PrintDataLogic --> ModelList
+    PrintDataLogic -- エクスポートデータ --> Storage
+
+    JobUI --> JobLogic
+    JobLogic -- "URL必須の確認" --> PrintData
+    JobLogic --> PrintJob
+    JobUI --> ResultLogic
+    ResultLogic -- "行の所属を検証" --> ModelList
+    ResultLogic --> PrintResult
+
+    YieldUI --> YieldLogic
+    PrintResult -- 集計 --> YieldLogic
+    ModelList -- 計画数 --> YieldLogic
+    YieldLogic -- 歩留まり --> YieldUI
+
+    MasterUI --> PrinterLogic
+    PrinterLogic --> Printer
+
+    AssemblyUI -- DLリクエスト --> DownloadLogic
+    JobUI -- DLリクエスト --> DownloadLogic
+    PrintDataUI -- DLリクエスト --> DownloadLogic
+    DownloadLogic -- URLリクエスト --> Storage
+    Storage -- 一時的な閲覧URL --> DownloadLogic
+
+    style PartInstance fill:#fff9c4,stroke:#fbc02d
+    style RevisionLogic fill:#fff9c4,stroke:#fbc02d
+    style ModelList fill:#f1f8e9,stroke:#33691e
+    style PrintResult fill:#f1f8e9,stroke:#33691e
+    style YieldLogic fill:#fff9c4,stroke:#fbc02d
+    style YieldUI fill:#fff9c4,stroke:#fbc02d
