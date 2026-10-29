@@ -32,17 +32,3 @@ export class UnauthorizedError extends PipelineError {
         this.name = 'UnauthorizedError';
     }
 }
-
-export class InSufficientStorageError extends PipelineError {
-    constructor(message: string) {
-        super(message);
-        this.name = 'InSufficientStorageError';
-    }
-}
-
-export class InvalidTransitionError extends PipelineError {
-    constructor(message: string) {
-        super(message);
-        this.name = 'InvalidTransitionError';
-    }
-}

@@ -1,6 +1,7 @@
 # テスト戦略・基盤構築計画 (Testing Strategy & Infrastructure Plan)
 
 > **改訂メモ (2026-10-28)**: `02_data_model.md` のドメインモデル再定義に合わせて改訂。テスト対象を新しいパイプライン（インポート、改訂登録、プリントデータ登録、ジョブ作成、結果記録、歩留まり集計、ダウンロード、プリンタ状態）に差し替え、Box／個体／ステータス遷移を前提としたテストとファクトリを廃止対象とした。実DBを使う方針とテスト基盤の構成は変更しない。
+> **進捗 (2026-10-28)**: 設計側（`assemblies` / `parts` / `part_instances`）の基盤・ファクトリ・`ImportPipeline` / `DownloadPipeline` / 制約 / RLS のテストを実装済み。製造側（プリントデータ以降）は未着手。テストDBは `drizzle-kit push` ではなく `supabase/migrations` の SQL から作る方式に変更した（2.1）。
 > 暫定扱いの事項は「(暫定)」と明示し、論点は `02_data_model.md` の「9. 未決事項」に集約している。
 
 ## 1. 背景と目的
@@ -12,28 +13,31 @@
 
 ### 2.1 環境構築
 - **Supabase Localの利用:** ローカル開発環境およびテスト環境におけるデータベースとしてSupabase Local（PostgreSQL）を活用、あるいは同等のPostgreSQLコンテナを稼働させる（現行は `postgres:16-alpine` のコンテナ `supabase-local-vitest` を自動起動）。
-- **テスト用データベース:** 開発用DBとは別に、テスト専用のスキーマまたはデータベースを用意し、テスト実行時に自動でマイグレーションを適用する（現行は `drizzle-kit push --force`）。
-- **スキーマ分離への対応 (暫定):** `05_architecture.md` の3.3でスキーマを分離する場合は、`drizzle.config.ts` の `schemaFilter` に `design` を含め、マイグレーションが両スキーマのテーブルを作成するようにする。
+- **テスト用データベース:** 開発用DBとは別のテスト専用データベースを用意し、テスト実行時に自動でマイグレーションを適用する。**`supabase/migrations` の SQL を適用する**（`tests/globalSetup.ts`。1回の実行につき1度だけ）。`drizzle-kit push` は RLS ポリシーの `USING` / `WITH CHECK` を落として作成するため使わない。デプロイされるスキーマそのものをテストすることになる。
+- **Supabase 互換スタブ:** テストDBは素の PostgreSQL のため、migration の前に `tests/utils/supabaseStub.ts` で `auth` スキーマ（`auth.users(id)`、`auth.uid()`）と `anon` / `authenticated` ロールを作る。`design` スキーマは毎回作り直す。Supabase 専用の migration（`storage` スキーマが必要なもの）は適用しない。
+- **スキーマ分離への対応:** `design` スキーマ（`05_architecture.md` 3.3）。`public` 側は製造側の実装時に追加する。
+- **安全装置:** `tests/globalSetup.ts` は、`DATABASE_URL` がローカルの 5432 ポート以外（開発DBなど）を指している場合は実行を拒否する。`vitest.config.ts` は `.env.test` だけを読み込み、`.env.local` は読まない。
 - **環境変数設定:** `.env.test` ファイルを用意し、Vitest実行時にはテスト用DBの接続文字列を読み込むように設定する。
 
 ### 2.2 テストライフサイクル管理 (Vitest Setup)
-- **Global Setup/Teardown (`tests/setup.ts`):**
-  - **開始時:** テスト用DBへの接続確立、最新スキーマの適用（マイグレーション実行）。
-  - **終了時:** DB接続のクローズ、必要に応じたリソースの解放。
+- **Global Setup (`tests/globalSetup.ts`):** 開始時に1回、テスト用DBコンテナの起動、Supabase 互換スタブと migration の適用。
+- **Setup Files (`tests/setup.ts`):** テストファイルごとに、終了時のDB接続のクローズ。
 - **Test Hook (`beforeEach`, `afterEach`):**
   - 各テストケース実行前に、対象テーブルのデータを全削除（`TRUNCATE`）し、クリーンな状態を保証する（`tests/utils/db.ts` の `clearDb`）。
-  - 削除対象は、新モデルの全テーブル（`assemblies`, `parts`, `part_instances`, `print_data`, `model_list_items`, `print_jobs`, `print_results`, `printers`, `resins`, `films`）とする。スキーマを分離する場合は、`design` スキーマのテーブルをスキーマ修飾して含める。
+  - 削除対象は、新モデルの全テーブル（`assemblies`, `parts`, `part_instances`, `print_data`, `model_list_items`, `print_jobs`, `print_results`, `printers`, `resins`, `films`）とする。`design` スキーマのテーブルはスキーマ修飾して含め、`auth.users`（スタブ）も空にする。現状は設計側3表と `auth.users` のみ。
   - これにより、他のテストケースの副作用を受けずに独立したテストが実行可能になる。
 
 ### 2.3 テストユーティリティ群の実装
 - **DB Connection Manager:** テストコードから安全にトランザクションを開始・終了できるラッパー。
 - **Data Factories / Fixtures:**
-  - テストに必要な前提データを簡潔に生成・INSERTするファクトリ関数群。
-  - 新モデルのファクトリ（`tests/factories/index.ts`）:
+  - テストに必要な前提データを簡潔に生成・INSERTするファクトリ関数群。**`@praha/drizzle-factory`**（`defineFactory` / `use` / traits / `sequence`）で定義する（`tests/factories/factories.ts`）。素の `db`（RLS を受けない）で投入するため、アセンブリの所有者は指定しなければユーザー（`auth.users` のスタブ）が自動で作られる。
+  - 開発用の `npm run db:seed`（`tests/seed.ts`）も同じファクトリを使う（`tests/factories/seed.ts` の `seedDesignSamples`）。
+  - 新モデルのファクトリ（`tests/factories/index.ts`。**設計側は実装済み**、製造側は未実装）:
 
 | ファクトリ | 内容 |
 | :--- | :--- |
-| `createTestAssembly` | アセンブリを作成（旧 `createTestProject` / `createTestUnit` を置換） |
+| `createTestUser` | `auth.users` のスタブへユーザーを作成する（所有者） |
+| `createTestAssembly` | アセンブリを作成（旧 `createTestProject` / `createTestUnit` を置換）。所有者を指定しなければ新規ユーザー |
 | `createTestPart` | パーツを作成し、**同一トランザクションで改訂 1 のインスタンスも作成**する（不変条件を満たしたデータを返す）。`{ part, instance }` を返す |
 | `createTestPartInstance` | 指定パーツに新しい改訂を追加する（改訂番号は最大値 + 1） |
 | `createTestPrintData` | プリントデータと製作モデルリスト（指定した複数インスタンスの転記）を作成する。`{ printData, items }` を返す |
@@ -43,7 +47,7 @@
 
   - 廃止するファクトリ: `createTestBox`, `createTestPartItem`, `createTestStatusHistory`。
 - **Assertion Helpers:** DBの状態を簡単に検証するためのヘルパー関数。
-- **ストレージのスタブ:** `StorageService` はインターフェース境界でスタブ化する。補償処理の検証のため、**呼び出し履歴の記録**（保存・削除されたパス）と、**失敗の注入**（特定の呼び出しで例外を投げる）ができるフェイクを用意する。
+- **ストレージのスタブ:** `StorageService` はインターフェース境界でスタブ化する。補償処理の検証のため、**呼び出し履歴の記録**（保存・削除されたパス）と、**失敗の注入**（特定の呼び出しで例外を投げる）ができるフェイクを用意する（`tests/utils/storage.ts` の `createStorageFake`）。`vi.mock` の factory 内で生成して `StorageService` と差し替える。
 
 ## 3. パイプラインテストの計画
 実DBを用いた統合的なテストで検証する。
@@ -123,23 +127,34 @@
   - `CHECK`: `parts_quantity > 0`、`revision >= 1`、`quantity > 0`、`success_count >= 0`、`failure_count >= 0`。
   - 削除時動作: 設計側（アセンブリ → パーツ → インスタンス）は `CASCADE`、ジョブが参照するプリンタ・レジン・フィルムとプリントデータは `RESTRICT` で削除できないこと (暫定。`02_data_model.md` 未決事項 18)。
 
+### 3.10 アクセス制御（RLS）のテスト（設計側は実装済み: `tests/db/rls.test.ts`）
+- 所有者は、自分のアセンブリ・パーツ・インスタンスを参照でき、作成・更新・削除できること。`owner_id` を指定しなくても DB の既定値（`auth.uid()`）で自分になること。
+- 他のユーザーは、参照できず、更新・削除しても 0 件で、データが変わらないこと。他人のアセンブリへパーツを、他人のパーツへ改訂を追加できないこと。他人を所有者にしたアセンブリを作れず、自分のアセンブリの所有者を他人に書き換えられないこと。
+- `anon` ロールは `design` スキーマにアクセスできないこと。JWT claims が無い `authenticated` は何も参照できないこと。
+- `withUser`: UUID でないユーザーIDを拒否し、終了後にロールと claims がコネクションに残らず、例外時にロールバックすること。
+- パイプラインは他人のデータを `NotFoundError`（存在しない場合と同じ）として扱うこと（`ImportPipeline` / `DownloadPipeline` のテスト）。
+- **否定のテストが空振りしないよう、必ず「所有者は見える」テストとセットにする**（ポリシーが壊れて全員に何も見えない場合も、否定のテストは通ってしまうため）。
+
+### 3.11 スキーマ定義の一致テスト（`tests/db/schemaParity.test.ts`）
+`supabase/migrations` の SQL は `schema.ts` から手で整えて作るため、Drizzle の定義と実DBのずれを検知する。カラム名と NOT NULL、CHECK / UNIQUE / 外部キー / インデックスの名前、ポリシー名とRLS有効化を比較し、全ポリシーに `USING` と `WITH CHECK` があること、`anon` に権限が無く `authenticated` に CRUD の権限があることを確認する。
+
 ## 4. 既存テスト・基盤の移行計画
 テスト基盤（`tests/setup.ts`, `tests/utils/db.ts`, `tests/factories/index.ts`）は構築済みである。新しいドメインモデルに合わせて、以下のとおり移行する。
 
 | 対象 | 対応 |
 | :--- | :--- |
-| `tests/modules/design-registry/pipelines/ImportPipeline.test.ts` | 3.1 に書き換える |
-| `tests/modules/design-registry/pipelines/DownloadPipeline.test.ts` | 3.7 に書き換える |
-| `tests/modules/master/pipelines/StatusPipelines.test.ts` | Box の分を削除し、3.8（プリンタ状態）のみ残す |
-| `tests/modules/production-control/pipelines/OrderPipeline.test.ts` | 削除（パイプラインの廃止） |
-| `tests/modules/production-control/pipelines/StatusUpdatePipeline.test.ts` | 削除（パイプラインの廃止） |
+| `tests/modules/design-registry/pipelines/ImportPipeline.test.ts` | 3.1 に書き換える（**済**。RLS による拒否と保存パスの owner 接頭辞も含む） |
+| `tests/modules/design-registry/pipelines/DownloadPipeline.test.ts` | 3.7 に書き換える（**済**。`printData` は製造側の実装時） |
+| `tests/modules/master/pipelines/StatusPipelines.test.ts` | 削除（**済**。`master` モジュールごと除去した。3.8 はプリンタの実装時に新規作成する） |
+| `tests/modules/production-control/pipelines/OrderPipeline.test.ts` | 削除（**済**） |
+| `tests/modules/production-control/pipelines/StatusUpdatePipeline.test.ts` | 削除（**済**） |
 | （新規）`tests/modules/design-registry/pipelines/PartInstanceRegistrationPipeline.test.ts` | 3.2 |
 | （新規）`tests/modules/print-production/pipelines/PrintDataRegistrationPipeline.test.ts` ほか | 3.3〜3.6 |
-| （新規）制約・削除時動作のテスト | 3.9 |
-| `tests/factories/index.ts` | 2.3 のとおり差し替える |
-| `tests/utils/db.ts`（`clearDb`） | `TRUNCATE` の対象テーブルを新モデルの全テーブルに差し替える |
+| （新規）制約・削除時動作のテスト | 3.9（設計側は**済**: `tests/db/designConstraints.test.ts`）。3.10 RLS は `tests/db/rls.test.ts`、3.11 は `tests/db/schemaParity.test.ts`（いずれも**済**） |
+| `tests/factories/index.ts` | 2.3 のとおり差し替える（設計側は**済**。ファクトリ自体のテストは `tests/factories/factories.test.ts`） |
+| `tests/utils/db.ts`（`clearDb`） | `TRUNCATE` の対象テーブルを新モデルの全テーブルに差し替える（設計側は**済**） |
 
 ## 5. 今後のステップ（フェーズ分割）
-1. **基盤の移行フェーズ:** 新スキーマの適用（スキーマ分離する場合は `drizzle.config.ts` の `schemaFilter` を含む）、`clearDb` と `StorageService` スタブ（呼び出し履歴・失敗注入）の更新。
-2. **ファクトリ作成フェーズ:** 2.3 のファクトリ群を実装する。`createTestPart` が改訂 1 を同時に作ることを最初に確認する。
+1. **基盤の移行フェーズ（設計側は完了）:** 新スキーマの適用（migration SQL から作る方式）、`clearDb` と `StorageService` スタブ（呼び出し履歴・失敗注入）の更新。製造側のテーブルを追加するときは、`public` 側の migration と `clearDb` の対象を足す。
+2. **ファクトリ作成フェーズ（設計側は完了）:** 2.3 のファクトリ群を実装する。`createTestPart` が改訂 1 を同時に作ることを最初に確認する。製造側のファクトリは未着手。
 3. **テスト実装フェーズ (TDD):** 各パイプラインのテストケースを新基盤上で記述し、テストを失敗させる（Red）状態を確認する。その後、実DBのトランザクションを用いた本番コードの実装（Green）、リファクタリングへと進む。着手順は、`ImportPipeline` → `PartInstanceRegistrationPipeline` → `PrintDataRegistrationPipeline` → `PrintJobCreationPipeline` → `JobResultRecordingPipeline` → `YieldQuery` とする（データの依存順）。

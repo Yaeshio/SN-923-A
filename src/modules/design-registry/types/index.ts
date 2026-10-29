@@ -1,23 +1,10 @@
-export enum PartStatus {
-    PENDING = 'PENDING',
-    ACTIVE = 'ACTIVE',
-}
+import type { assemblies, parts, partInstances } from '../../../shared/db/schema';
 
-export interface Project {
-    id: string;
-    name: string;
-}
+export type Assembly = typeof assemblies.$inferSelect;
+export type Part = typeof parts.$inferSelect;
+export type PartInstance = typeof partInstances.$inferSelect;
 
-export interface Unit {
-    id: string;
-    projectId: string;
-    name: string;
-}
-
-export interface Part {
-    id: string;
-    unitId: string;
-    partNumber: string;
-    stlUrl: string;
-    status: PartStatus;
+// パイプライン・サービスを実行するユーザー。DB アクセスはこのユーザーの RLS で行う。
+export interface UserContext {
+    userId: string;
 }

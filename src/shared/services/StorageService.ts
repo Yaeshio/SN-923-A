@@ -1,11 +1,18 @@
-import { supabase } from '../lib/supabase';
+import { createClient } from '../lib/supabase/server';
 
+const BUCKET = 'stl-files';
+
+// ログインユーザーのセッション付きクライアントで呼ぶ。storage.objects の RLS (オーナー別フォルダ) がそのユーザーに適用される。
 export const StorageService = {
-  uploadFile: async (file: any, path: string): Promise<string> => {
+  uploadFile: async (file: Blob, path: string): Promise<string> => {
+    const supabase = await createClient();
     const { data, error } = await supabase.storage
-      .from('stl-files')
+      .from(BUCKET)
       .upload(path, file, {
-        upsert: true,
+        // オブジェクトは不変として扱い、上書きしない
+        upsert: false,
+        // ブラウザによって STL の MIME が異なる (Windows は application/vnd.ms-pki.stl) ため、バケットの許可 MIME に固定する
+        contentType: 'application/octet-stream',
       });
 
     if (error) {
@@ -15,11 +22,13 @@ export const StorageService = {
     return data.path;
   },
 
+  // downloadName は拡張子を含む保存時のファイル名
   getDownloadUrl: async (path: string, downloadName?: string): Promise<string> => {
+    const supabase = await createClient();
     const { data, error } = await supabase.storage
-      .from('stl-files')
+      .from(BUCKET)
       .createSignedUrl(path, 3600, {
-        download: downloadName ? `${downloadName}.stl` : undefined,
+        download: downloadName,
       }); // 1 hour
 
     if (error) {
@@ -30,8 +39,9 @@ export const StorageService = {
   },
 
   deleteFile: async (path: string): Promise<void> => {
+    const supabase = await createClient();
     const { error } = await supabase.storage
-      .from('stl-files')
+      .from(BUCKET)
       .remove([path]);
 
     if (error) {

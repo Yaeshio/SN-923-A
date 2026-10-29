@@ -6,6 +6,8 @@
 ## 1. 業務パイプライン (Pipelines)
 各ロジックは `specs/05_architecture.md` で定義されたパイプライン層として実装され、複数のサービスをオーケストレートする。
 
+**実行ユーザー**: すべてのパイプラインは、入力とは別に実行ユーザー `ctx: { userId }` を受け取る。Server Action が `requireUser()`（`src/shared/auth/requireUser.ts`）でセッションのユーザーを取得して渡す。DB アクセスは `withUser(ctx.userId, …)` を経由し、RLS により**自分のデータだけ**が対象になる（`02_data_model.md` 8.1）。他人のデータを指定した場合は、存在しない場合と同じ `NotFoundError` になる。
+
 ### 1.0 一覧
 
 | パイプライン | 利用画面 (`03_ui_ux.md`) | モジュール |
@@ -21,15 +23,15 @@
 | マスタ系のCRUD（1.9。パイプラインなし） | `AssemblyListUI`、`MasterUI` | `design-registry`、`master` |
 
 ### 1.1 パーツインポートパイプライン (`ImportPipeline`)
-- **入力**: `files: File[]`, `assemblyId: string`, `partsQuantity?: number`（既定 1。登録後にマスタ画面で編集可）
+- **入力**: `files: File[]`, `assemblyId: string`, `partsQuantity?: number`（既定 1。登録後にマスタ画面で編集可）。実装上、1回の呼び出しの全ファイルに同じ `partsQuantity` を設定する（ファイルごとの必要数は、D&D 付きのインポート画面で対応する）
 - **実装方針**:
     - 開発コスト削減およびデータ不整合防止のため、すべてのステップを **同期処理（直列実行）** で行う。ユーザーはアップロードから登録完了まで画面上で待機し、バックグラウンド処理への移行は行わない。
     - 複数ファイルの一括登録は **all-or-nothing** とする。1件でも失敗した場合、DBには何も作られず、保存済みのファイルも削除する。
     - 旧仕様の `PENDING` / `ACTIVE` による二段階登録は廃止した（`02_data_model.md` 未決事項 9）。代わりに「Storage 保存 → DB トランザクション → 失敗時の補償削除」で不整合を防ぐ。
 - **ステップ**:
-    1. **入力検証**: `assemblyId` のアセンブリが存在すること、ファイルが1件以上あること、`partsQuantity` が 1 以上の整数であること。
+    1. **入力検証**: `assemblyId` のアセンブリが存在し、実行ユーザーのものであること（`NotFoundError`）、ファイルが1件以上あること、`partsQuantity` が 1 以上の整数であること、全ファイルが拡張子 `.stl` でモデル名（拡張子を除いたファイル名）が空でないこと（`ValidationError`）。
     2. **ID採番**: ファイルごとに `partId` と初期インスタンスの `instanceId` をアプリ側で採番する。モデル名はファイル名から拡張子を除いたものとする。
-    3. **ストレージ保存**: ファイルを `parts/{partId}/{ファイル名}` へアップロードし、相対パスを得る。
+    3. **ストレージ保存**: ファイルを `{userId}/parts/{partId}/{保存用ファイル名}` へ**直列に**アップロードし、相対パスを得る（パス規約は 2.2）。
     4. **DB登録（単一トランザクション）**:
         - `parts` を登録（`model_name`, `model_url` = 相対パス, `parts_quantity`）。
         - 初期インスタンスを `part_instances` に登録（`revision` = 1, `instance_name` = `model_name`, `instance_url` = `model_url` と同じパス, `change_note` = NULL）。**パーツと初期インスタンスは必ず同一トランザクションで作る**（各パーツが改訂 1 を持つ不変条件の保証）。
@@ -104,7 +106,7 @@
 - **ステップ**:
     1. **存在確認**: 対象のレコードを取得する。存在しなければ `NotFoundError`。`kind: 'part'` の場合は、そのパーツの**最新改訂**（`revision` が最大）のインスタンスに解決する。
     2. **相対パスの取得**: `part_instances.instance_url` または `print_data.print_data_url` を取得する。
-    3. **署名付きURL発行**: `StorageService` を経由して一時的な閲覧URLを取得する。ダウンロード時のファイル名は、インスタンスなら「`instance_name`_rev{N}」、プリントデータなら `name` とし、拡張子はアップロード時のファイルのものを引き継ぐ（現行の `StorageService.getDownloadUrl` は `.stl` を固定で付与するため、プリントデータの形式に対応させる改修が必要）。
+    3. **署名付きURL発行**: `StorageService` を経由して一時的な閲覧URLを取得する。ダウンロード時のファイル名は、インスタンスなら「`instance_name`_rev{N}」、プリントデータなら `name` とし、拡張子はアップロード時のファイルのものを引き継ぐ（`StorageService.getDownloadUrl` は拡張子込みのファイル名を受け取る。インスタンスの拡張子は保存パスから取り出す）。`kind` は現状 `partInstance` / `part` のみ実装済みで、`printData` は製造側の実装時に追加する。
 - **出力**: 一時的な閲覧URL。
 
 ### 1.8 プリンタ状態変更パイプライン (`PrinterStatusPipeline`)
@@ -127,15 +129,21 @@
 - **形式制限**: 旧仕様の部品番号の形式制約（`^[A-Z0-9_-]+$`）は、CADの書き出しファイル名をそのままモデル名にするため課さない (暫定)。空文字のみ拒否する。
 
 ### 2.2 ストレージのパス規約
-DBには**相対パス**を保持する（絶対URLは保持しない）。バケットは現行の `stl-files` を継続して使用する。
+DBには**相対パス**を保持する（絶対URLは保持しない）。バケットは現行の `stl-files` を継続して使用する（非公開）。
+
+**すべてのパスは先頭を `{userId}/`（`auth.uid()`）にする。** `storage.objects` の RLS が先頭フォルダで所有者を判定し、ユーザーは自分のフォルダだけを読み書き・削除できる（`supabase/migrations/20261028100100_secure_stl_storage.sql`）。Storage の API も、ユーザーのセッション付きクライアントで呼ぶ。
 
 | 対象 | パス | 保持先 |
 | :--- | :--- | :--- |
-| パーツの元データ（改訂 1 と共有） | `parts/{partId}/{ファイル名}` | `parts.model_url`, 初期インスタンスの `instance_url` |
-| 修正後データ（改訂 2 以降） | `parts/{partId}/instances/{instanceId}/{ファイル名}` | `part_instances.instance_url` |
-| プリントデータ | `print-data/{printDataId}/{ファイル名}` | `print_data.print_data_url` |
+| パーツの元データ（改訂 1 と共有） | `{userId}/parts/{partId}/{保存用ファイル名}` | `parts.model_url`, 初期インスタンスの `instance_url` |
+| 修正後データ（改訂 2 以降） | `{userId}/parts/{partId}/instances/{instanceId}/{保存用ファイル名}` | `part_instances.instance_url` |
+| プリントデータ | `{userId}/print-data/{printDataId}/{保存用ファイル名}` | `print_data.print_data_url` |
 
-Storage 上のオブジェクトは不変として扱い、上書きや、参照中のファイルの削除をしない（`02_data_model.md` 未決事項 16）。
+Storage 上のオブジェクトは不変として扱い、上書きや、参照中のファイルの削除をしない（`02_data_model.md` 未決事項 16）。アップロードは `upsert: false` で、同じパスへの再アップロードは重複エラーになる。
+
+**保存用ファイル名**: Supabase Storage はキーに ASCII 以外を含むと `InvalidKey` で拒否する（日本語のファイル名で確認済み）。そのため保存用ファイル名は、元のファイル名の `[A-Za-z0-9._-]` 以外を `_` に置換した名前とし、ASCII が残らない場合は `model.stl` とする。元のファイル名（拡張子を除く）は `parts.model_name` / `part_instances.instance_name` に残り、ダウンロード時の名前はそこから付ける。
+
+**Content-Type**: ブラウザによって STL の MIME が異なる（Windows は `application/vnd.ms-pki.stl`）ため、アップロード時は `application/octet-stream` に固定する（バケットの許可 MIME に合わせる）。
 
 ### 2.3 異常系の挙動
 - **DB/Storage不整合への対応**:

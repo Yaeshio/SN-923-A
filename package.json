@@ -11,10 +11,11 @@
     "test": "vitest",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:push": "drizzle-kit push",
-    "db:seed": "tsx src/shared/db/seed.ts"
+    "db:generate": "drizzle-kit generate",
+    "db:seed": "tsx tests/seed.ts"
   },
   "devDependencies": {
+    "@praha/drizzle-factory": "^1.4.2",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/node": "^20.0.0",
     "@types/react": "^19.2.14",
