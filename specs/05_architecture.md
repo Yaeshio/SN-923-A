@@ -81,18 +81,29 @@ src/
 - 製造側が設計側の情報を保持する場合は、外部キーを張らずに値を写し取る（`model_list_items` の `part_instance_id` / `part_id` / `model_name`）。
 - 転記テーブルの行は、転記のたびに行ごとの新規UUIDを主キーとして採番する。
 
-### 3.3 スキーマ分離 (暫定。`02_data_model.md` 未決事項 10)
-設計側と製造側は外部キーで結ばないため、Postgres のスキーマを分けることができる。**分離する案**を暫定の方針とする。
+### 3.3 スキーマ分離 (確定。`02_data_model.md` 未決事項 10)
+設計側と製造側は外部キーで結ばないため、Postgres のスキーマを分ける。
 
 | スキーマ | テーブル |
 | :--- | :--- |
 | `design` | `assemblies`, `parts`, `part_instances` |
 | `public` | `print_data`, `model_list_items`, `print_jobs`, `print_results`, `printers`, `resins`, `films` |
 
-- 実装は Drizzle の `pgSchema('design')` で定義する。`drizzle.config.ts` には `schemaFilter: ['public', 'design']` を指定する。
+- 実装は Drizzle の `pgSchema('design')` で定義する（設計側3表は実装済み。`public` 側は製造側の実装時に追加する）。`drizzle.config.ts` の `schemaFilter` は当面 `['design']` とする。共有 Supabase の `public` には他アプリのテーブルがあり、`public` を含めると差分適用が他アプリのテーブルを DROP しようとするため、`public` 側を追加する時点で扱いを決める。
+- **スキーマの適用は `supabase/migrations/*.sql` を正とする。`drizzle-kit push` は使わない**（RLS ポリシーの `USING` / `WITH CHECK` を落として作成することを確認した）。`schema.ts` を変更したら `npm run db:generate` で SQL を生成し、整形して migration に取り込む。テストDBも同じ migration から作る（`06_test_strategy.md` 2.1）。
 - アプリのDBアクセスは Drizzle の直接接続（`DATABASE_URL`）で行い、`supabase-js` は Storage にのみ使う。そのため、Supabase のデータAPI（PostgREST）に対するスキーマ公開設定は不要である。
 - テストのクリーンアップ（`TRUNCATE`）は両スキーマのテーブルを対象にする（`06_test_strategy.md`）。
-- 分離しない場合も、モジュールの所有テーブルと依存の規則（1.2）は変わらない。
+
+### 3.4 認可（行レベルセキュリティ）
+設計データは所有者（`assemblies.owner_id`）ごとに分離する（`02_data_model.md` 8.1）。アプリは Drizzle で直結し、接続ロール（`postgres`）は RLS を受けないため、次の規則で RLS をアプリのクエリに効かせる。
+
+- **DB アクセスはすべて `withUser(userId, fn)`（`src/shared/db/rls.ts`）を経由する。** トランザクション内で `set_config('request.jwt.claims' / 'request.jwt.claim.sub', …, true)` と `SET LOCAL ROLE authenticated` を実行してから `fn(tx)` を呼ぶ。`LOCAL` なので、コミット/ロールバックで元に戻り、コネクションプールへ漏れない。
+- 素の `db`（`src/shared/db`）は RLS を受けない。テスト・seed・管理処理のみで使い、アプリコード（Server Action / Pipeline / Service / Page）からは直接使わない。
+- `userId` は Server Action が `requireUser()`（`supabase.auth.getUser()` でAuthサーバに検証させる）から得て、Pipeline / Service へ明示的に渡す。
+- Storage はユーザーのセッション付きクライアントで呼び、`storage.objects` の RLS（先頭フォルダ = `auth.uid()`）で所有者を判定する（`04_logic_api.md` 2.2）。
+- 新しいテーブルを追加するときは、RLS を有効にし、所有者をたどれるポリシーを定義する（設計側は親の可視性を継承）。
+
+分離しない場合も、モジュールの所有テーブルと依存の規則（1.2）は変わらない。
 
 ## 4. 技術スタック (Confirmed)
 エージェントによる実装およびデプロイに使用する技術スタックを以下に定める。
@@ -103,7 +114,7 @@ src/
 - **ORM**: Drizzle ORM (Supabase との相性が良く、軽量に動作するため)
 - **Deployment**: Vercel
 - **Storage**: Supabase Storage (STLファイル・プリントデータの管理。バケットは現行の `stl-files` を継続)
-- **Authentication**: Supabase Auth (ユーザー認証。MVP では未使用で、Phase 2 以降)
+- **Authentication**: Supabase Auth (ログイン。設計データの所有者別アクセス制御に使用。ロール別の権限は Phase 2 以降)
 - **Validation**: Zod
 
 ## 5. 開発・デプロイフロー

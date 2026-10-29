@@ -1,106 +1,62 @@
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../../src/shared/db';
-import { projects, units, parts, boxes, machines, partItems, statusHistory } from '../../src/shared/db/schema';
-import { v7 as uuidv7 } from 'uuid';
-import { eq } from 'drizzle-orm';
+import { assemblies, parts, partInstances } from '../../src/shared/db/schema';
+import { assemblyFactory, factoryDb, partFactory, partInstanceFactory, userFactory } from './factories';
 
-export async function createTestProject(overrides?: Partial<typeof projects.$inferInsert>) {
-    const data = {
-        name: 'Test Project',
-        ...overrides,
-    };
-    const [result] = await db.insert(projects).values(data).returning();
-    return result;
+export * from './factories';
+
+// ファクトリは素の postgres ロール (RLS を受けない) で投入する。
+// アセンブリの所有者を指定しない場合は、新しいユーザー (auth.users のスタブ) が自動で作られる。
+
+type AssemblyInsert = Partial<typeof assemblies.$inferInsert>;
+type PartInsert = Partial<typeof parts.$inferInsert>;
+type PartInstanceInsert = Partial<typeof partInstances.$inferInsert>;
+
+export async function createTestUser(overrides?: { id?: string }): Promise<{ id: string }> {
+    return userFactory(factoryDb).create(overrides ?? {}) as Promise<{ id: string }>;
 }
 
-export async function createTestUnit(overrides?: Partial<typeof units.$inferInsert> & { projectOverrides?: Partial<typeof projects.$inferInsert> }) {
-    let projectId = overrides?.projectId;
-    if (!projectId) {
-        projectId = (await createTestProject(overrides?.projectOverrides)).id;
+export async function createTestAssembly(overrides?: AssemblyInsert): Promise<typeof assemblies.$inferSelect> {
+    return assemblyFactory(factoryDb).create(overrides ?? {}) as Promise<typeof assemblies.$inferSelect>;
+}
+
+/**
+ * パーツと、その改訂 1 のインスタンスを同一トランザクションで作る (ImportPipeline と同じ不変条件)。
+ * 改訂 1 のインスタンスは、パーツ名とファイルパスをコピーし、change_note は NULL。
+ */
+export async function createTestPart(overrides?: PartInsert & { instanceOverrides?: PartInstanceInsert }) {
+    const { instanceOverrides, ...partOverrides } = overrides ?? {};
+    return factoryDb.transaction(async (tx) => {
+        const part = await partFactory(tx).create(partOverrides) as typeof parts.$inferSelect;
+        const instance = await partInstanceFactory(tx).create({
+            partId: part.id,
+            revision: 1,
+            instanceName: part.modelName,
+            instanceUrl: part.modelUrl,
+            changeNote: null,
+            ...instanceOverrides,
+        }) as typeof partInstances.$inferSelect;
+        return { part, instance };
+    });
+}
+
+/** 指定したパーツに新しい改訂 (最大の改訂番号 + 1) を追加する。 */
+export async function createTestPartInstance(overrides: PartInstanceInsert & { partId: string }): Promise<typeof partInstances.$inferSelect> {
+    const part = await db.query.parts.findFirst({ where: eq(parts.id, overrides.partId) });
+    if (!part) {
+        throw new Error(`Part not found: ${overrides.partId}`);
     }
-    const data = {
-        projectId,
-        name: 'Test Unit',
-        ...overrides,
-    };
-    const [result] = await db.insert(units).values(data).returning();
-    return result;
-}
+    const [{ max }] = await db
+        .select({ max: sql<number>`coalesce(max(${partInstances.revision}), 0)::int` })
+        .from(partInstances)
+        .where(eq(partInstances.partId, overrides.partId));
 
-export async function createTestPart(overrides?: Partial<typeof parts.$inferInsert> & { unitOverrides?: Partial<typeof units.$inferInsert> }) {
-    let unitId = overrides?.unitId;
-    if (!unitId) {
-        unitId = (await createTestUnit(overrides?.unitOverrides)).id;
-    }
-    const data = {
-        unitId,
-        partNumber: 'PN-001',
-        stlUrl: 'https://example.com/file.stl',
-        status: 'PENDING' as const,
+    const revision = max + 1;
+    return partInstanceFactory(factoryDb).create({
+        revision,
+        instanceName: part.modelName,
+        instanceUrl: `test/instances/${part.id}/rev${revision}.stl`,
+        changeNote: 'テスト用の設計修正',
         ...overrides,
-    };
-    const [result] = await db.insert(parts).values(data).returning();
-    return result;
-}
-
-export async function createTestBox(overrides?: Partial<typeof boxes.$inferInsert>) {
-    const data = {
-        name: 'Test Box',
-        status: 'AVAILABLE' as const,
-        ...overrides,
-    };
-    const [result] = await db.insert(boxes).values(data).returning();
-    return result;
-}
-
-export async function createTestMachine(overrides?: Partial<typeof machines.$inferInsert>) {
-    const data = {
-        name: 'Test Machine',
-        type: 'FDM',
-        status: 'READY' as const,
-        ...overrides,
-    };
-    const [result] = await db.insert(machines).values(data).returning();
-    return result;
-}
-
-export async function createTestPartItem(overrides?: Partial<typeof partItems.$inferInsert> & {
-    partOverrides?: Partial<typeof parts.$inferInsert>,
-    machineOverrides?: Partial<typeof machines.$inferInsert>,
-    boxOverrides?: Partial<typeof boxes.$inferInsert>
-}) {
-    let partId = overrides?.partId;
-    if (!partId) {
-        partId = (await createTestPart(overrides?.partOverrides)).id;
-    }
-    let machineId = overrides?.machineId;
-    if (!machineId) {
-        machineId = (await createTestMachine(overrides?.machineOverrides)).id;
-    }
-    let boxId = overrides?.boxId;
-    // Box is optional, but often needed in tests if not null
-
-    const data = {
-        partId,
-        machineId,
-        boxId,
-        status: 'READY' as const,
-        ...overrides,
-    };
-    const [result] = await db.insert(partItems).values(data).returning();
-    return result;
-}
-
-export async function createTestStatusHistory(overrides?: Partial<typeof statusHistory.$inferInsert> & { itemOverrides?: Partial<typeof partItems.$inferInsert> }) {
-    let partItemId = overrides?.partItemId;
-    if (!partItemId) {
-        partItemId = (await createTestPartItem(overrides?.itemOverrides)).id;
-    }
-    const data = {
-        partItemId,
-        statusFrom: 'READY' as const,
-        statusTo: 'PRINTING' as const,
-        ...overrides,
-    };
-    const [result] = await db.insert(statusHistory).values(data).returning();
-    return result;
+    }) as Promise<typeof partInstances.$inferSelect>;
 }

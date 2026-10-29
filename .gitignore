@@ -56,8 +56,8 @@ next-env.d.ts
 # Repository specific
 repomix-output.xml
 
-# Drizzle
-/drizzle/.drizzle
+# Drizzle (db:generate の出力。migration の正は supabase/migrations)
+/drizzle/
 
 # Supabase status files
 status.json

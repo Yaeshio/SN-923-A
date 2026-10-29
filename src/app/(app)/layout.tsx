@@ -1,4 +1,4 @@
-import { FileUp, FilePlus, LayoutDashboard, Factory, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Factory, LogOut } from "lucide-react";
 import Link from "next/link";
 import { logout } from "@/app/login/actions";
 
@@ -18,13 +18,9 @@ export default function AppLayout({
             <span className="font-bold tracking-tight text-lg">SN-923 System</span>
           </div>
           <nav className="flex items-center gap-6 text-sm font-medium ml-4">
-            <Link href="/projects" className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground">
+            <Link href="/assemblies" className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground">
               <LayoutDashboard className="h-4 w-4" />
-              <span>プロジェクト</span>
-            </Link>
-            <Link href="/master" className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground">
-              <Settings className="h-4 w-4" />
-              <span>マスタ管理</span>
+              <span>アセンブリ</span>
             </Link>
           </nav>
           <div className="ml-auto flex items-center">

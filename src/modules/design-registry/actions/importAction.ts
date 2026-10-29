@@ -1,20 +1,18 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { safeAction } from '@/shared/actions/safeAction';
+import { requireUser } from '@/shared/auth/requireUser';
 import { importPartsSchema } from './schemas';
 import { ImportPipelineImpl } from '../pipelines/ImportPipeline';
-import { Part } from '../types';
 
 export const importPartsAction = async (formData: FormData) => {
     // 1. Manually parse FormData to the object shape expected by zod
-    const projectId = formData.get('projectId') as string;
-    const unitId = formData.get('unitId') as string;
-    const files = formData.getAll('files') as File[];
-
     const rawInput = {
-        projectId,
-        unitId,
-        files,
+        assemblyId: formData.get('assemblyId'),
+        partsQuantity: formData.get('partsQuantity') || 1,
+        // ファイル未選択でも空の File が届くため除外する
+        files: (formData.getAll('files') as File[]).filter((file) => file.size > 0),
     };
 
     // 2. Validate and Execute with safeAction wrapper
@@ -22,13 +20,18 @@ export const importPartsAction = async (formData: FormData) => {
         importPartsSchema,
         rawInput,
         async (input) => {
+            const user = await requireUser();
             const pipeline = new ImportPipelineImpl();
-            const result: Part[] = await pipeline.execute({
-                projectId: input.projectId,
-                unitId: input.unitId,
-                files: input.files, // Pass File objects
-            });
+            const result = await pipeline.execute(
+                {
+                    assemblyId: input.assemblyId,
+                    partsQuantity: input.partsQuantity,
+                    files: input.files,
+                },
+                { userId: user.id },
+            );
 
+            revalidatePath(`/assemblies/${input.assemblyId}`);
             return result;
         }
     );

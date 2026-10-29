@@ -3,7 +3,8 @@
 > **改訂メモ (2026-10-24)**: ドメインモデルを再定義。旧「Project→Unit→Part→PartItem（かんばん式ステータス＋Box保管）」を廃止し、「アセンブリ→パーツ」と「プリントデータ→プリントジョブ→製作品（歩留まり集計）」を中心とするモデルへ全面改訂した。旧モデルは git 履歴を参照のこと。
 > **改訂メモ (2026-10-25)**: 製作モデルリストの複合PKを廃止し、転記時に行ごとへ一意なUUIDを採番する形に変更。併せて、製作モデルリストは `print_data_id` をFKで持ち（`print_data.model_list_id` は廃止）、製作品は製作モデルリスト行を参照する形に変更した。
 > **改訂メモ (2026-10-26)**: パーツから派生する `パーツインスタンス`（製作用に修正したデータ。設計の修正変更を改訂番号付きで記録）を新設し、製作モデルリストの転記元をインスタンスに変更した。併せて `parts.status`（`PartStatus`）を廃止し、`parts.parts_quantity`（アセンブリ1つあたりの必要数）を追加した。
-> 本書は実装（`src/shared/db/schema.ts`）に先行する。実装との差分は別タスクで解消する。
+> **改訂メモ (2026-10-28)**: 設計側3表（`assemblies` / `parts` / `part_instances`）を `design` スキーマに実装した（`src/shared/db/schema.ts`、`supabase/migrations/20261028100000_create_design_schema.sql`）。併せて、所有者別のアクセス制御のため `assemblies.owner_id` を追加し（→ 5.1、8.）、`created_at` を `timestamptz` とした。スキーマ分離（未決事項 10）は `design` + `public` で確定した。
+> 製造側・マスタ（`print_data` 以降）は本書に先行しており、未実装。実装との差分は別タスクで解消する。
 > 「9. 未決事項」に確認待ちの論点を集約している。**暫定扱いの記述は本書内で「(暫定)」と明示**する。
 
 ## 1. 設計方針
@@ -52,6 +53,7 @@ erDiagram
     ASSEMBLY {
         uuid id PK
         text name "アセンブリ名"
+        uuid owner_id FK "所有者 (auth.users)"
     }
     PART {
         uuid id PK
@@ -118,7 +120,7 @@ erDiagram
 - **転記テーブルの行ID**: 他テーブルから転記して作る行（`model_list_items`）は、転記のたびに**行ごとに新規UUIDを採番**して主キーとする。転記元の `part_id` や複合キーを主キーに流用しない。同じパーツを別のプリントデータへ転記しても行IDは重複せず、`print_results` は行IDを単一列のFKで参照できる。
 - **パーツインスタンス（改訂）**: `part_instances` は改訂ごとの**追記専用**レコードとする。データを修正するたびに新しい改訂を追加し、修正前のデータ（`instance_url` の指すファイル）は上書き・削除しない。Storage 上のオブジェクトも不変として扱う。
 - **Enum**: Postgres の `ENUM` 型として定義する。
-- **タイムスタンプ**: 全テーブルに `created_at timestamp DEFAULT now() NOT NULL` を付与する (暫定)。期間別の歩留まり集計とトレーサビリティのため。→ 未決事項 14
+- **タイムスタンプ**: 全テーブルに `created_at timestamptz DEFAULT now() NOT NULL` を付与する (暫定)。実装は `timestamptz`（期間別集計でタイムゾーンを区別できるようにするため）。期間別の歩留まり集計とトレーサビリティのため。→ 未決事項 14
 - **URL列** (`model_url`, `print_data_url`): ストレージ上の**相対パス**を保持する（絶対URLは保持しない）。取得時に `StorageService` が一時的な閲覧URLへ変換する。
 - **日本語名のカラム**: 物理名は英語の snake_case とし、日本語名は本書と UI 表示ラベルで対応づける。
 
@@ -140,6 +142,7 @@ erDiagram
 | :--- | :--- | :--- | :--- |
 | `id` | uuid | NOT NULL | PK |
 | `name` | text | NOT NULL | アセンブリ名（草案では `uuid` となっていたが誤記と判断し text とした。→ 未決事項 1） |
+| `owner_id` | uuid | NOT NULL | FK → `auth.users.id`（`ON DELETE CASCADE`）。既定値 `auth.uid()`。**所有者**であり、所有者だけがこのアセンブリと配下を CRUD できる（→ 8. RLS）。`parts` / `part_instances` は所有者の列を持たず、親をたどって継承する |
 
 **parts (パーツ)** — アセンブリに用いる概念的なモデル。実際はここから製作用にインスタンスとして調整をしたデータが派生する。
 
@@ -275,6 +278,7 @@ erDiagram
 | 親 → 子 | `ON DELETE` | 理由 |
 | :--- | :--- | :--- |
 | assemblies → parts → part_instances | `CASCADE` | 設計側は転記方式のため、削除しても製造側の記録は壊れない |
+| auth.users → assemblies | `CASCADE` | ユーザーを削除すると、そのユーザーの設計データも削除される（Storage のファイルは残り、定期クリーンアップで回収する） |
 | print_data → model_list_items | `CASCADE` | リストはプリントデータに属する |
 | print_jobs → print_results | `CASCADE` | 誤登録したジョブを結果ごと削除できるようにする |
 | print_data → print_jobs | `RESTRICT` | ジョブが残るプリントデータは削除不可 |
@@ -282,6 +286,19 @@ erDiagram
 | printers / resins / films → print_jobs | `RESTRICT` | ジョブが参照するマスタは削除不可 |
 
 Storage 上のファイルは削除に連動させず、DB から参照されなくなったものを定期クリーンアップで削除する。
+
+### 8.1 行レベルセキュリティ (RLS) — 設計側
+ログインユーザーは**自分が所有するデータだけ**を参照・作成・更新・削除できる。未ログイン（`anon`）は `design` スキーマにアクセスできない。
+
+| テーブル | ポリシー（`authenticated` ロール、全操作） |
+| :--- | :--- |
+| `assemblies` | `owner_id = auth.uid()`（`USING` / `WITH CHECK` とも。他人を所有者にする作成・書き換えは拒否される） |
+| `parts` | 親アセンブリが見える（`EXISTS (SELECT 1 FROM assemblies WHERE id = parts.assembly_id)`）。親の RLS が入れ子で効くため、他人のアセンブリへは追加できない |
+| `part_instances` | 親パーツが見える（同様に入れ子） |
+
+- アプリは Drizzle で直結する（`postgres` ロールは `BYPASSRLS` で RLS を受けない）。そのため、DB アクセスは `src/shared/db/rls.ts` の `withUser(userId, fn)` を経由し、トランザクション内で `SET LOCAL ROLE authenticated` と JWT claims を設定して RLS を効かせる（→ `05_architecture.md` 3.4）。
+- 他人のデータは「存在しない」と区別できない（`NotFoundError` / 404）。
+- `design` スキーマは PostgREST に公開しない。`authenticated` への `GRANT` はアプリの直結アクセスのためである。
 - `parts` の `(assembly_id, model_name)` ユニーク制約は、再インポート（CADデータの改版）を `part_instances` の新しい改訂として扱うか、新規パーツとして扱うかの方針が決まってから判断する（将来拡張）。
 
 ## 9. 未決事項
@@ -299,7 +316,7 @@ Storage 上のファイルは削除に連動させず、DB から参照されな
 | 7 | 成功数＋失敗数 と 製作数量 | 規定なし | 未規定。一致必須／超過・不足は警告のみ、のいずれか |
 | 8 | マスタ属性・消費レジン量の単位 | `id` のみ／単位なし | プリンタ・レジン・フィルムは名称のみ。単位（mL か g）は未定 |
 | 9 | パーツの `PENDING/ACTIVE` | 草案に status なし | **確定 (2026-10-26)**: 廃止（現スコープで製作ステータス管理が不要なため）。インポート時のDB/Storage不整合対策は、ID採番→Storage保存→DBトランザクション登録→DB失敗時に保存済みファイルを削除、の補償処理で代替する |
-| 10 | アセンブリ・パーツの別スキーマ化 | 「別スキーマでもよいかも？」 | 転記方式と相性が良いため分離案。最終判断は `05_architecture.md` |
+| 10 | アセンブリ・パーツの別スキーマ化 | 「別スキーマでもよいかも？」 | **確定 (2026-10-28)**: 設計側（`assemblies` / `parts` / `part_instances`）を `design` スキーマ、製造・マスタを `public` スキーマに分離する。`public` 側は製造側の実装時に作る |
 | 11 | ID方針 | 草案に記載なし | 現行実装に合わせ v4。旧仕様の「UUID v7」は撤回 |
 | 12 | `ジョブ番号` の採番 | `text` のみ | UNIQUE とするのみ。採番ルール（連番／日付ベース／手入力）は未定 |
 | 13 | `モデルリストid` の要否 | `製作モデルリスト.id > プリントデータ.モデルリストid`（リスト行→プリントデータは多対1） | **確定 (2026-10-25)**: `print_data.model_list_id` を廃止し、`model_list_items.print_data_id` をFKとする。1プリントデータにつき1リストで、リストの使い回しは想定しない（リストは草案の多重度どおり1プリントデータにのみ属するため、`model_list_id` は `print_data_id` と等価だった） |
