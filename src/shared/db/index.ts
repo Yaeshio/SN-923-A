@@ -15,5 +15,6 @@ if (!connectionString && process.env.NODE_ENV !== 'test') {
 }
 
 // In environment where connection string is missing (like build time), use a dummy URL to prevent postgres-js from crashing on initialization
-export const client = postgres(connectionString || 'postgres://dummy:dummy@localhost:5432/dummy');
+// 本番は Supabase の Transaction pooler (6543) 経由で、prepared statement が使えないため prepare: false にする。
+export const client = postgres(connectionString || 'postgres://dummy:dummy@localhost:5432/dummy', { prepare: false });
 export const db = drizzle(client, { schema });
