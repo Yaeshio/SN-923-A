@@ -54,6 +54,13 @@ npm run test
 ```
 Docker が必要です。テスト用のPostgreSQL（`supabase-local-vitest` コンテナ、ポート5432）が自動で起動し、`supabase/migrations` を適用します。5432を別のコンテナが使っている場合は停止されます。接続先は `.env.test` の `DATABASE_URL` です（ローカルの5432以外を指していると実行を拒否します）。詳細は [specs/06_test_strategy.md](specs/06_test_strategy.md)。
 
+## 本番の環境変数
+デプロイ先には `.env.example` の3つ（`DATABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）を設定します。
+
+- `DATABASE_URL` は Supabase Dashboard の **Connect > Transaction pooler**（ポート6543）の文字列を使います。ホスト（`aws-0` / `aws-1` など）はプロジェクトごとに異なるため、手で組み立てずコピーしてください。誤ると `Tenant or user not found` で接続に失敗します。
+- 6543 は prepared statement が使えないため、`src/shared/db/index.ts` は `prepare: false` で接続します。
+- マイグレーションは別経路です。`supabase link` 後に `supabase db push`（Direct / Session接続）で適用します。アプリの `DATABASE_URL` は使いません。
+
 ## アクセス制御（RLS）と DB アクセスの規則
 設計データは作成したユーザー（`assemblies.owner_id`）ごとに分離されます。アプリは Drizzle で直結するため、DBアクセスは必ず `src/shared/db/rls.ts` の `withUser(userId, fn)` を経由してください。素の `db` は RLS を受けないため、テスト・seed・管理処理でのみ使います（[specs/05_architecture.md](specs/05_architecture.md) 3.4）。
 
