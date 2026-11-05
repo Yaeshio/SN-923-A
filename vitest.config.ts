@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { parse } from 'dotenv';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
@@ -7,10 +7,13 @@ import { resolve } from 'path';
 // .env.local (開発DB) を巻き込まないよう、.env.test だけを読む。
 const testEnv = parse(readFileSync(resolve(__dirname, '.env.test')));
 
+// この設定は「DB結合」層 (実Postgresコンテナ + Storageフェイク)。
+// ユニット (vitest.unit.config.ts) と Supabase結合 (vitest.integration.config.ts) は、別の設定・別のスクリプトで実行する。
 export default defineConfig({
     test: {
         environment: 'node',
         globals: true,
+        exclude: [...configDefaults.exclude, '**/*.unit.test.ts', '**/*.integration.test.ts'],
         env: testEnv,
         globalSetup: ['./tests/globalSetup.ts'],
         setupFiles: ['./tests/setup.ts'],

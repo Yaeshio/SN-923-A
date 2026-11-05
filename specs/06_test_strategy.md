@@ -2,6 +2,7 @@
 
 > **改訂メモ (2026-10-28)**: `02_data_model.md` のドメインモデル再定義に合わせて改訂。テスト対象を新しいパイプライン（インポート、改訂登録、プリントデータ登録、ジョブ作成、結果記録、歩留まり集計、ダウンロード、プリンタ状態）に差し替え、Box／個体／ステータス遷移を前提としたテストとファクトリを廃止対象とした。実DBを使う方針とテスト基盤の構成は変更しない。
 > **進捗 (2026-10-28)**: 設計側（`assemblies` / `parts` / `part_instances`）の基盤・ファクトリ・`ImportPipeline` / `DownloadPipeline` / 制約 / RLS のテストを実装済み。製造側（プリントデータ以降）は未着手。テストDBは `drizzle-kit push` ではなく `supabase/migrations` の SQL から作る方式に変更した（2.1）。
+> **進捗 (2026-11-01)**: テストを「ユニット / DB結合 / Supabase結合」の3層に分けた（2.4）。`ImportPipeline` は3層に整理済みで、実STLを実バケットへ保存する結合テストを追加した。`DownloadPipeline`・`withUser`・Storage のポリシーの分割と結合テストは未着手。
 > 暫定扱いの事項は「(暫定)」と明示し、論点は `02_data_model.md` の「9. 未決事項」に集約している。
 
 ## 1. 背景と目的
@@ -47,7 +48,26 @@
 
   - 廃止するファクトリ: `createTestBox`, `createTestPartItem`, `createTestStatusHistory`。
 - **Assertion Helpers:** DBの状態を簡単に検証するためのヘルパー関数。
-- **ストレージのスタブ:** `StorageService` はインターフェース境界でスタブ化する。補償処理の検証のため、**呼び出し履歴の記録**（保存・削除されたパス）と、**失敗の注入**（特定の呼び出しで例外を投げる）ができるフェイクを用意する（`tests/utils/storage.ts` の `createStorageFake`）。`vi.mock` の factory 内で生成して `StorageService` と差し替える。
+- **ストレージのスタブ:** `StorageService` はインターフェース境界でスタブ化する。補償処理の検証のため、**呼び出し履歴の記録**（保存・削除されたパス）と、**失敗の注入**（特定の呼び出しで例外を投げる）ができるフェイクを用意する（`tests/utils/storage.ts` の `createStorageFake`）。`vi.mock` の factory 内で生成して `StorageService` と差し替える。これは **DB結合層**の方式で、実バケットへの保存は **Supabase結合層**（2.4）で検証する。
+- **STLフィクスチャ:** `tests/fixtures/stl/` に実ファイルを置く（`cube-ascii.stl` と `cube-binary.stl`。同じ 10mm の立方体で、バイト列は異なる）。`tests/utils/stl.ts` の `loadStl` / `readStlFixture` で `File` やバイト列として使う。
+
+### 2.4 テストの層構成
+テストは、必要なものの違いで3層に分ける。ファイル名の接尾辞と Vitest の設定で分離し、層ごとに別のコマンドで実行する。
+
+| 層 | ファイル | 設定 / コマンド | 必要なもの | 検証内容 |
+| :--- | :--- | :--- | :--- | :--- |
+| ユニット | `*.unit.test.ts` | `vitest.unit.config.ts` / `npm run test:unit` | なし | I/O より前の純粋ロジック。DB と Storage のモジュールを `vi.mock` で差し替え、**呼ばれないこと**も検証する |
+| DB結合（Storage はフェイク） | `*.test.ts` | `vitest.config.ts` / `npm run test` | Docker（`postgres:16-alpine`） | DB 登録、RLS、制約、補償処理の失敗注入 |
+| Supabase結合 | `*.integration.test.ts` | `vitest.integration.config.ts` / `npm run test:integration` | Docker と `npx supabase start` | 実STL → 実バケット → 実DB。実 Auth のユーザー、署名付きURL、バケットのポリシー |
+
+- **配置:** `src/` に対応させる（例: `src/shared/db/rls.ts` → `tests/shared/db/rls.unit.test.ts`）。DB層そのものの検証は `tests/db/` に置く。
+- **層の選び方:** 各ケースは、証明できる最も下の層に置き、同じ内容を複数の層で重複させない。**Supabase結合は Storage を使うパイプラインだけ**に置く。DB だけを使うパイプライン（ジョブ作成、結果記録、歩留まり集計など）は、DB結合層が実Postgresを使うため、そのままで足りる。
+- **ユニットの否定のテストは空振りさせない:** 「呼ばれない」ことの検証は、有効な入力が検証を通過して I/O へ進むケースとセットにする。
+- **Supabase結合の基盤（`tests/integration/`）:**
+  - `globalSetup.ts` は `supabase status -o env` で接続先とキーを取得し、ローカル以外（`127.0.0.1` / `localhost` 以外）を拒否する。未起動、`design` スキーマやバケットの不足は、案内を出して即座に失敗する（スタックの自動起動と `db reset` はしない。開発データが消えるため）。
+  - 開発用スタックを共有するため、`clearDb`（`TRUNCATE`）は使わない。テストごとに Auth Admin API で実ユーザーを作り、終了時にそのユーザーのバケット内のファイルとユーザー（アセンブリ以下は `ON DELETE CASCADE`）を削除する。中断した実行の残骸（メールが `@integration.example.com`）は、開始時と終了時に掃除する。
+  - `StorageService` は実物のまま通す。`src/shared/lib/supabase/server` の `createClient()` だけを、テストユーザーでサインイン済みの supabase-js クライアントに差し替える（`next/headers` の `cookies()` がリクエスト外で動かないため）。ユーザーの切り替えは `asUser()`。
+  - DB は `postgres` ロールの素の `db` で検証用に読み、アプリの経路は `withUser`（`authenticated` ロール + RLS）を通る。
 
 ## 3. パイプラインテストの計画
 実DBを用いた統合的なテストで検証する。
@@ -63,6 +83,10 @@
   - 存在しない `assemblyId`、`partsQuantity` が 0 以下の場合に、DBに何も作られず例外がスローされること。
   - **補償処理**: DB登録で失敗させた場合に、保存済みファイルが削除されていること（スタブの呼び出し履歴で確認）。Storage保存で途中失敗した場合に、DBにレコードが作られず、保存済みの分が削除されていること。
   - 複数ファイルの登録が all-or-nothing であること（1件の失敗で全件が登録されない）。
+- **層の割り当て（2.4）:**
+  - ユニット（`ImportPipeline.unit.test.ts`）: `toStorageSafeName`、入力検証（ファイルなし、`partsQuantity`、STL以外・モデル名が空、非UUIDのアセンブリID）。DB と Storage に触れる前に失敗することを、モックが呼ばれないことで確認する。
+  - DB結合（`ImportPipeline.test.ts`）: 登録内容、アセンブリの存在と RLS、Storage のパス、補償処理の失敗注入（保存の途中失敗、DB 失敗、競合削除、補償削除の失敗）。
+  - Supabase結合（`ImportPipeline.integration.test.ts`）: 実STL（ASCII / バイナリ）が実バケットへ**バイト列のまま**保存されること、DB の行、ASCII 以外のファイル名、他人のアセンブリへの拒否（所有者の成功とセット）、補償処理で**実バケットから本当にファイルが消える**こと（DB 失敗 / 保存の途中失敗）。失敗注入の網羅はDB結合に任せ、ここは代表ケースに絞る。
 
 ### 3.2 `PartInstanceRegistrationPipeline` のテスト
 - **準備:** `createTestPart` で改訂 1 を持つパーツを投入する。
@@ -143,7 +167,7 @@
 
 | 対象 | 対応 |
 | :--- | :--- |
-| `tests/modules/design-registry/pipelines/ImportPipeline.test.ts` | 3.1 に書き換える（**済**。RLS による拒否と保存パスの owner 接頭辞も含む） |
+| `tests/modules/design-registry/pipelines/ImportPipeline.test.ts` | 3.1 に書き換える（**済**。RLS による拒否と保存パスの owner 接頭辞も含む）。入力検証と `toStorageSafeName` は `ImportPipeline.unit.test.ts` へ移し、実バケットを使う `ImportPipeline.integration.test.ts` を追加した（**済**。2.4） |
 | `tests/modules/design-registry/pipelines/DownloadPipeline.test.ts` | 3.7 に書き換える（**済**。`printData` は製造側の実装時） |
 | `tests/modules/master/pipelines/StatusPipelines.test.ts` | 削除（**済**。`master` モジュールごと除去した。3.8 はプリンタの実装時に新規作成する） |
 | `tests/modules/production-control/pipelines/OrderPipeline.test.ts` | 削除（**済**） |

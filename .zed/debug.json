@@ -1,0 +1,47 @@
+// Zed のデバッグ構成 (F4 = `debugger: start` で選択)。
+// テストファイルを開いた状態で実行すると、そのファイルだけを Vitest で動かしてデバッグする。
+// Zed の自動検出タスクは既定の設定 (vitest.config.ts) で動く。この設定は *.unit.test.ts / *.integration.test.ts を
+// exclude しているため、層ごとに --config を指定したこの構成を使う。
+//
+// 対象は起動時にアクティブなエディタのファイル ($ZED_FILE)。ファイルの種類に合う構成を選ぶこと
+// (*.unit.test.ts → unit、*.integration.test.ts → Supabase integration)。合わないと
+// "No test files found" で終了する。ターミナルの `filter:` の行で渡されたファイルを確認できる。
+//
+// ブレークポイントが効かないときは、各 args に "--pool=forks", "--poolOptions.forks.singleFork" を足す
+// (テストを worker thread ではなく子プロセスで動かす。Vitest 1.x の既定 pool は threads)。
+[
+    {
+        // 前提なし。DB・Storage は vi.mock で差し替え済み。
+        "label": "Vitest: unit (current file)",
+        "adapter": "JavaScript",
+        "type": "node",
+        "request": "launch",
+        "program": "$ZED_WORKTREE_ROOT/node_modules/vitest/vitest.mjs",
+        "args": ["run", "--config", "vitest.unit.config.ts", "$ZED_FILE"],
+        "cwd": "$ZED_WORKTREE_ROOT",
+        "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+        // 前提: Docker。globalSetup (tests/globalSetup.ts) が 5432 番のテストDBコンテナを起動する。
+        // 5432 を別のコンテナが使っていると停止される。
+        "label": "Vitest: DB (current file)",
+        "adapter": "JavaScript",
+        "type": "node",
+        "request": "launch",
+        "program": "$ZED_WORKTREE_ROOT/node_modules/vitest/vitest.mjs",
+        "args": ["run", "--config", "vitest.config.ts", "$ZED_FILE"],
+        "cwd": "$ZED_WORKTREE_ROOT",
+        "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+        // 前提: `npx supabase start` で起動済みのローカルスタック (実Storage + 実DB + 実Auth)。
+        "label": "Vitest: Supabase integration (current file)",
+        "adapter": "JavaScript",
+        "type": "node",
+        "request": "launch",
+        "program": "$ZED_WORKTREE_ROOT/node_modules/vitest/vitest.mjs",
+        "args": ["run", "--config", "vitest.integration.config.ts", "$ZED_FILE"],
+        "cwd": "$ZED_WORKTREE_ROOT",
+        "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    }
+]
