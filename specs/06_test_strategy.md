@@ -15,9 +15,10 @@
 ### 2.1 環境構築
 - **Supabase Localの利用:** ローカル開発環境およびテスト環境におけるデータベースとしてSupabase Local（PostgreSQL）を活用、あるいは同等のPostgreSQLコンテナを稼働させる（現行は `postgres:16-alpine` のコンテナ `supabase-local-vitest` を自動起動）。
 - **テスト用データベース:** 開発用DBとは別のテスト専用データベースを用意し、テスト実行時に自動でマイグレーションを適用する。**`supabase/migrations` の SQL を適用する**（`tests/globalSetup.ts`。1回の実行につき1度だけ）。`drizzle-kit push` は RLS ポリシーの `USING` / `WITH CHECK` を落として作成するため使わない。デプロイされるスキーマそのものをテストすることになる。
-- **Supabase 互換スタブ:** テストDBは素の PostgreSQL のため、migration の前に `tests/utils/supabaseStub.ts` で `auth` スキーマ（`auth.users(id)`、`auth.uid()`）と `anon` / `authenticated` ロールを作る。`design` スキーマは毎回作り直す。Supabase 専用の migration（`storage` スキーマが必要なもの）は適用しない。
+- **Supabase 互換スタブ:** テストDBは素の PostgreSQL のため、migration の前に `tests/utils/supabaseStub.ts` で `auth` スキーマ（`auth.users(id)`、`auth.uid()`）と `anon` / `authenticated` ロールを作る。`design` スキーマは毎回作り直す。Supabase 専用の migration（`storage` スキーマが必要なもの）は適用しない。アプリの接続ロール `app_runtime` の migration（`*_create_app_runtime_role.sql`）は適用し、migration に含まれないパスワードはスタブがテスト用の固定値を設定する（ロールはクラスタ共通で残るため、migration は冪等）。
 - **スキーマ分離への対応:** `design` スキーマ（`05_architecture.md` 3.3）。`public` 側は製造側の実装時に追加する。
-- **安全装置:** `tests/globalSetup.ts` は、`DATABASE_URL` がローカルの 5432 ポート以外（開発DBなど）を指している場合は実行を拒否する。`vitest.config.ts` は `.env.test` だけを読み込み、`.env.local` は読まない。
+- **接続の分離:** テストの接続は2つ。`DATABASE_URL`（アプリ用 `app_runtime`。`withUser` を通さないクエリは permission denied）と、`DATABASE_ADMIN_URL`（管理用 `postgres`。テストDBの準備・`TRUNCATE`・ファクトリ・検証用の読み取り。`src/shared/db/admin.ts` の `adminDb`）。アプリのコードを通す経路は `db`（`app_runtime`）で、データの準備と確認は `adminDb` で行う。
+- **安全装置:** `tests/globalSetup.ts` は、`DATABASE_URL` と `DATABASE_ADMIN_URL` のどちらかがローカルの 5432 ポート以外（開発DBなど）を指している場合は実行を拒否する。`vitest.config.ts` は `.env.test` だけを読み込み、`.env.local` は読まない。
 - **環境変数設定:** `.env.test` ファイルを用意し、Vitest実行時にはテスト用DBの接続文字列を読み込むように設定する。
 
 ### 2.2 テストライフサイクル管理 (Vitest Setup)
@@ -31,7 +32,7 @@
 ### 2.3 テストユーティリティ群の実装
 - **DB Connection Manager:** テストコードから安全にトランザクションを開始・終了できるラッパー。
 - **Data Factories / Fixtures:**
-  - テストに必要な前提データを簡潔に生成・INSERTするファクトリ関数群。**`@praha/drizzle-factory`**（`defineFactory` / `use` / traits / `sequence`）で定義する（`tests/factories/factories.ts`）。素の `db`（RLS を受けない）で投入するため、アセンブリの所有者は指定しなければユーザー（`auth.users` のスタブ）が自動で作られる。
+  - テストに必要な前提データを簡潔に生成・INSERTするファクトリ関数群。**`@praha/drizzle-factory`**（`defineFactory` / `use` / traits / `sequence`）で定義する（`tests/factories/factories.ts`）。管理用の `adminDb`（RLS を受けない `postgres` ロール）で投入するため、アセンブリの所有者は指定しなければユーザー（`auth.users` のスタブ）が自動で作られる。
   - 開発用の `npm run db:seed`（`tests/seed.ts`）も同じファクトリを使う（`tests/factories/seed.ts` の `seedDesignSamples`）。
   - 新モデルのファクトリ（`tests/factories/index.ts`。**設計側は実装済み**、製造側は未実装）:
 
@@ -67,7 +68,7 @@
   - `globalSetup.ts` は `supabase status -o env` で接続先とキーを取得し、ローカル以外（`127.0.0.1` / `localhost` 以外）を拒否する。未起動、`design` スキーマやバケットの不足は、案内を出して即座に失敗する（スタックの自動起動と `db reset` はしない。開発データが消えるため）。
   - 開発用スタックを共有するため、`clearDb`（`TRUNCATE`）は使わない。テストごとに Auth Admin API で実ユーザーを作り、終了時にそのユーザーのバケット内のファイルとユーザー（アセンブリ以下は `ON DELETE CASCADE`）を削除する。中断した実行の残骸（メールが `@integration.example.com`）は、開始時と終了時に掃除する。
   - `StorageService` は実物のまま通す。`src/shared/lib/supabase/server` の `createClient()` だけを、テストユーザーでサインイン済みの supabase-js クライアントに差し替える（`next/headers` の `cookies()` がリクエスト外で動かないため）。ユーザーの切り替えは `asUser()`。
-  - DB は `postgres` ロールの素の `db` で検証用に読み、アプリの経路は `withUser`（`authenticated` ロール + RLS）を通る。
+  - DB は `postgres` ロールの `adminDb` で検証用に読み、アプリの経路は `withUser`（`app_runtime` から `authenticated` へ切り替え + RLS）を通る。
 
 ## 3. パイプラインテストの計画
 実DBを用いた統合的なテストで検証する。
@@ -151,11 +152,12 @@
   - `CHECK`: `parts_quantity > 0`、`revision >= 1`、`quantity > 0`、`success_count >= 0`、`failure_count >= 0`。
   - 削除時動作: 設計側（アセンブリ → パーツ → インスタンス）は `CASCADE`、ジョブが参照するプリンタ・レジン・フィルムとプリントデータは `RESTRICT` で削除できないこと (暫定。`02_data_model.md` 未決事項 18)。
 
-### 3.10 アクセス制御（RLS）のテスト（設計側は実装済み: `tests/db/rls.test.ts`）
+### 3.10 アクセス制御（RLS）のテスト（設計側は実装済み: `tests/db/rls.test.ts`、`tests/db/appRuntime.test.ts`）
 - 所有者は、自分のアセンブリ・パーツ・インスタンスを参照でき、作成・更新・削除できること。`owner_id` を指定しなくても DB の既定値（`auth.uid()`）で自分になること。
 - 他のユーザーは、参照できず、更新・削除しても 0 件で、データが変わらないこと。他人のアセンブリへパーツを、他人のパーツへ改訂を追加できないこと。他人を所有者にしたアセンブリを作れず、自分のアセンブリの所有者を他人に書き換えられないこと。
 - `anon` ロールは `design` スキーマにアクセスできないこと。JWT claims が無い `authenticated` は何も参照できないこと。
-- `withUser`: UUID でないユーザーIDを拒否し、終了後にロールと claims がコネクションに残らず、例外時にロールバックすること。
+- `withUser`: UUID でないユーザーIDを拒否し、終了後にロールと claims がコネクションに残らず（アプリ用の接続は `app_runtime` のまま）、例外時にロールバックすること。
+- アプリの接続ロール `app_runtime`（`tests/db/appRuntime.test.ts`）: RLS をバイパスできず権限を引き継がないロールであること。**`withUser` を通さない素の `db` は、3表の SELECT / INSERT / UPDATE / DELETE がすべて permission denied になり、データが変わらないこと。** `withUser` の中では `authenticated` で動き、`RESET ROLE` しても `postgres` などへ昇格できないこと。スキーマやテーブルを作れないこと。実 Supabase でも同じ観点を `tests/db/appRuntime.integration.test.ts`（Supabase結合）で確認する。テストDBは素の PostgreSQL にロールをスタブで作っているだけなので、`GRANT authenticated` が実環境で通ること、実 Auth のユーザーで `withUser` が動くこと、Supabase が既定で付ける権限（`PUBLIC` や default privileges）経由で `design` / `auth` / `storage` / `public` のテーブルに届かないことは、こちらで確認する。
 - パイプラインは他人のデータを `NotFoundError`（存在しない場合と同じ）として扱うこと（`ImportPipeline` / `DownloadPipeline` のテスト）。
 - **否定のテストが空振りしないよう、必ず「所有者は見える」テストとセットにする**（ポリシーが壊れて全員に何も見えない場合も、否定のテストは通ってしまうため）。
 

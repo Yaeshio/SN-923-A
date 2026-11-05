@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
-import { db } from '../../src/shared/db';
+import { adminDb } from '../../src/shared/db/admin';
 import { assemblies, parts, partInstances } from '../../src/shared/db/schema';
 import { sqlState } from '../utils/db';
 import { createTestAssembly, createTestPart, createTestPartInstance, createTestUser, factoryDb, partInstanceFactory } from '../factories';
@@ -56,10 +56,10 @@ describe('design スキーマの制約', () => {
         const { part } = await createTestPart({ assemblyId: assembly.id });
         await createTestPartInstance({ partId: part.id });
 
-        await db.delete(assemblies).where(eq(assemblies.id, assembly.id));
+        await adminDb.delete(assemblies).where(eq(assemblies.id, assembly.id));
 
-        expect(await db.select().from(parts)).toHaveLength(0);
-        expect(await db.select().from(partInstances)).toHaveLength(0);
+        expect(await adminDb.select().from(parts)).toHaveLength(0);
+        expect(await adminDb.select().from(partInstances)).toHaveLength(0);
     });
 
     it('パーツを削除すると、そのインスタンスも削除され、他のパーツは影響を受けないこと (CASCADE)', async () => {
@@ -67,9 +67,9 @@ describe('design スキーマの制約', () => {
         const target = await createTestPart({ assemblyId: assembly.id });
         const kept = await createTestPart({ assemblyId: assembly.id });
 
-        await db.delete(parts).where(eq(parts.id, target.part.id));
+        await adminDb.delete(parts).where(eq(parts.id, target.part.id));
 
-        const remaining = await db.select().from(partInstances);
+        const remaining = await adminDb.select().from(partInstances);
         expect(remaining.map((i) => i.id)).toEqual([kept.instance.id]);
     });
 
@@ -78,10 +78,10 @@ describe('design スキーマの制約', () => {
         const assembly = await createTestAssembly({ ownerId: owner.id });
         await createTestPart({ assemblyId: assembly.id });
 
-        await db.execute(sql`delete from auth.users where id = ${owner.id}`);
+        await adminDb.execute(sql`delete from auth.users where id = ${owner.id}`);
 
-        expect(await db.select().from(assemblies)).toHaveLength(0);
-        expect(await db.select().from(parts)).toHaveLength(0);
+        expect(await adminDb.select().from(assemblies)).toHaveLength(0);
+        expect(await adminDb.select().from(parts)).toHaveLength(0);
     });
 
     it('owner_id は必須で、存在しないユーザーは参照できないこと', async () => {

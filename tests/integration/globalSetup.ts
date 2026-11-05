@@ -15,6 +15,17 @@ declare module 'vitest' {
 
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost'];
 
+// ローカルのスタック専用の app_runtime のパスワード (migration にはパスワードを書かない)。README の .env.local の例と同じ値にしてある。
+const APP_RUNTIME_LOCAL_PASSWORD = 'app_runtime';
+
+// 管理用の接続先 (postgres) から、アプリ用 (app_runtime) の接続先を作る
+function toAppRuntimeUrl(dbUrl: string): string {
+    const url = new URL(dbUrl);
+    url.username = 'app_runtime';
+    url.password = APP_RUNTIME_LOCAL_PASSWORD;
+    return url.toString();
+}
+
 let env: SupabaseEnv | undefined;
 
 function readSupabaseEnv(): SupabaseEnv {
@@ -42,7 +53,7 @@ function readSupabaseEnv(): SupabaseEnv {
     if (!apiUrl || !dbUrl || !anonKey || !serviceRoleKey) {
         throw new Error('`supabase status -o env` の出力から API_URL / DB_URL / キーを取得できませんでした。');
     }
-    return { apiUrl, dbUrl, anonKey, serviceRoleKey };
+    return { apiUrl, dbUrl, appDbUrl: toAppRuntimeUrl(dbUrl), anonKey, serviceRoleKey };
 }
 
 // 誤って本番など、ローカル以外の Supabase に対して実行しないようにする (tests/globalSetup.ts と同じ考え方)
@@ -59,6 +70,13 @@ async function assertSchemaAndBucket(current: SupabaseEnv) {
         if (!row.table_name) {
             throw new Error('design スキーマがありません。`npx supabase migration up` で supabase/migrations を適用してください。');
         }
+
+        // アプリは app_runtime で接続する。ロールは migration が作り、パスワードは環境側で設定する (ここはローカルのスタックだけ)
+        const [role] = await sql<{ rolname: string }[]>`select rolname from pg_roles where rolname = 'app_runtime'`;
+        if (!role) {
+            throw new Error('app_runtime ロールがありません。`npx supabase migration up` で supabase/migrations を適用してください。');
+        }
+        await sql.unsafe(`ALTER ROLE app_runtime PASSWORD '${APP_RUNTIME_LOCAL_PASSWORD}'`);
     } finally {
         await sql.end();
     }

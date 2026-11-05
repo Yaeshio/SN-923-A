@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { db } from '../../src/shared/db';
+import { adminDb } from '../../src/shared/db/admin';
 import { assemblies, parts, partInstances } from '../../src/shared/db/schema';
 import { assemblyFactory, factoryDb, partFactory, partInstanceFactory, userFactory } from './factories';
 
@@ -42,11 +42,11 @@ export async function createTestPart(overrides?: PartInsert & { instanceOverride
 
 /** 指定したパーツに新しい改訂 (最大の改訂番号 + 1) を追加する。 */
 export async function createTestPartInstance(overrides: PartInstanceInsert & { partId: string }): Promise<typeof partInstances.$inferSelect> {
-    const part = await db.query.parts.findFirst({ where: eq(parts.id, overrides.partId) });
+    const part = await adminDb.query.parts.findFirst({ where: eq(parts.id, overrides.partId) });
     if (!part) {
         throw new Error(`Part not found: ${overrides.partId}`);
     }
-    const [{ max }] = await db
+    const [{ max }] = await adminDb
         .select({ max: sql<number>`coalesce(max(${partInstances.revision}), 0)::int` })
         .from(partInstances)
         .where(eq(partInstances.partId, overrides.partId));

@@ -13,7 +13,8 @@ export default defineConfig({
     // 共有 Supabase の public には他アプリのテーブルがあり、push が DROP を提案しうるため含めない。
     // 製造側 (public) のテーブルを追加する時点で見直す。
     schemaFilter: ['design'],
+    // drizzle-kit は管理用 (postgres ロール) の接続を使う。アプリ用の DATABASE_URL (app_runtime) はテーブルを参照する権限を持たない。
     dbCredentials: {
-        url: process.env.DATABASE_URL!,
+        url: process.env.DATABASE_ADMIN_URL!,
     },
 });

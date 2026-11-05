@@ -4,6 +4,7 @@ import { StorageService } from '../../../../src/shared/services';
 import { NotFoundError } from '../../../../src/shared/errors';
 import { createTestAssembly } from '../../../factories';
 import { db } from '../../../../src/shared/db';
+import { adminDb } from '../../../../src/shared/db/admin';
 import { assemblies, parts, partInstances } from '../../../../src/shared/db/schema';
 import type { StorageFake } from '../../../utils/storage';
 
@@ -34,8 +35,8 @@ describe('ImportPipeline', () => {
 
     async function countRows() {
         return {
-            parts: (await db.select().from(parts)).length,
-            instances: (await db.select().from(partInstances)).length,
+            parts: (await adminDb.select().from(parts)).length,
+            instances: (await adminDb.select().from(partInstances)).length,
         };
     }
 
@@ -165,7 +166,7 @@ describe('ImportPipeline', () => {
                 .mockImplementationOnce(realTransaction as any)
                 .mockImplementationOnce(async (fn: any) => {
                     // 検証後・登録前にアセンブリが削除された状況を作る
-                    await db.delete(assemblies);
+                    await adminDb.delete(assemblies);
                     return realTransaction(fn);
                 });
 

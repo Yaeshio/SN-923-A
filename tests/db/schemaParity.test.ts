@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core';
-import { db } from '../../src/shared/db';
+import { adminDb } from '../../src/shared/db/admin';
 import { assemblies, parts, partInstances } from '../../src/shared/db/schema';
 
 // supabase/migrations の SQL は schema.ts から手で整えて作っている。
@@ -10,7 +10,7 @@ import { assemblies, parts, partInstances } from '../../src/shared/db/schema';
 const tables: Record<string, PgTable> = { assemblies, parts, part_instances: partInstances };
 
 async function rows<T extends Record<string, unknown>>(query: ReturnType<typeof sql>) {
-    return (await db.execute<T>(query)) as unknown as T[];
+    return (await adminDb.execute<T>(query)) as unknown as T[];
 }
 
 describe('Drizzle のスキーマ定義と実DB (migration) の一致', () => {

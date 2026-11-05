@@ -76,18 +76,22 @@ async function ensureDbRunning() {
 export async function setup() {
     await ensureDbRunning();
 
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
-        throw new Error('DATABASE_URL is not set. Define it in .env.test.');
+    // テストDBの準備と管理は postgres ロール (DATABASE_ADMIN_URL)。アプリ用 (DATABASE_URL = app_runtime) はスキーマを作れない。
+    const adminUrl = process.env.DATABASE_ADMIN_URL;
+    const appUrl = process.env.DATABASE_URL;
+    if (!adminUrl || !appUrl) {
+        throw new Error('DATABASE_URL and DATABASE_ADMIN_URL must be set. Define them in .env.test.');
     }
-    // 誤って開発DB (.env.local) に対して破壊的な操作をしないよう、ローカルのテストDB以外は拒否する
-    if (!/@(127\.0\.0\.1|localhost):5432\//.test(databaseUrl)) {
-        throw new Error(`Refusing to run tests against DATABASE_URL=${databaseUrl.replace(/:\/\/[^@]*@/, '://***@')}`);
+    // 誤って開発DB (.env.local) に対して破壊的な操作をしないよう、ローカルのテストDB以外は拒否する (両方の接続先を確認する)
+    for (const url of [adminUrl, appUrl]) {
+        if (!/@(127\.0\.0\.1|localhost):5432\//.test(url)) {
+            throw new Error(`Refusing to run tests against ${url.replace(/:\/\/[^@]*@/, '://***@')}`);
+        }
     }
 
     try {
         console.log('Preparing test database (Supabase stub + supabase/migrations)...');
-        await prepareTestDatabase(databaseUrl);
+        await prepareTestDatabase(adminUrl);
     } catch (error) {
         console.error('Failed to prepare test database:', error);
         throw error;
