@@ -49,10 +49,32 @@ npm run dev
 ブラウザで [http://localhost:3000](http://localhost:3000) を開き、ログイン後に「アセンブリ」から操作します（アセンブリ作成 → STLインポート → パーツ一覧とダウンロード）。
 
 ## テスト
-```bash
-npm run test
-```
-Docker が必要です。テスト用のPostgreSQL（`supabase-local-vitest` コンテナ、ポート5432）が自動で起動し、`supabase/migrations` を適用します。5432を別のコンテナが使っている場合は停止されます。接続先は `.env.test` の `DATABASE_URL` です（ローカルの5432以外を指していると実行を拒否します）。詳細は [specs/06_test_strategy.md](specs/06_test_strategy.md)。
+テストは3つの層に分かれています。ファイル名の接尾辞で見分けます。
+
+| 層 | ファイル | コマンド | 必要なもの |
+| :--- | :--- | :--- | :--- |
+| ユニット | `*.unit.test.ts` | `npm run test:unit` | なし（DB・Storage は使いません） |
+| DB結合（Storage はフェイク） | `*.test.ts` | `npm run test` | Docker |
+| Supabase結合（実バケット + 実DB） | `*.integration.test.ts` | `npm run test:integration` | Docker + `npx supabase start` |
+
+### DB結合（`npm run test`）
+Docker が必要です。テスト用のPostgreSQL（`supabase-local-vitest` コンテナ、ポート5432）が自動で起動し、`supabase/migrations` を適用します。5432を別のコンテナが使っている場合は停止されます。接続先は `.env.test` の `DATABASE_URL` です（ローカルの5432以外を指していると実行を拒否します）。Storage は `tests/utils/storage.ts` のフェイクに差し替えます。
+
+### Supabase結合（`npm run test:integration`）
+実STLを実バケット（`stl-files`）へ保存し、DBへ登録するところまでを検証します。事前に `npx supabase start` でローカルのスタックを起動し、`supabase/migrations` を適用しておいてください（スタックの自動起動と `db reset` は行いません）。接続先は `supabase status` から取得し、ローカル以外は実行を拒否します。
+
+- 開発用のスタック（54321 / 54322）を共有します。DB全体の `TRUNCATE` はせず、テストが作ったユーザー・データ・ファイルだけを削除します（中断した実行の残骸は、次回の開始時に `*@integration.example.com` のユーザーとして掃除されます）。
+- 別プロジェクトのスタックが同じポートで動いていると接続できません。先に `supabase stop` してください。
+
+### Zed でのデバッグ
+`.zed/debug.json` に、層ごとの「開いているテストファイルをデバッグ」する構成があります。テストファイルを開いてブレークポイントを置き、`debugger: start`（F4）で `Vitest: unit (current file)` などを選びます。TypeScript は `.ts` のまま止まります（別途の設定は不要です）。
+
+- Zed の自動検出タスクは既定の設定（`vitest.config.ts`）で動くため、`*.unit.test.ts` と `*.integration.test.ts` は対象外になります。必ずこの構成を使ってください。
+- 対象は「起動時にアクティブなエディタのファイル」（`$ZED_FILE`）です。ファイルの種類に合う構成を選んでください（`*.unit.test.ts` は `Vitest: unit`、`*.integration.test.ts` は `Vitest: Supabase integration`）。合わないと `No test files found` で終了し、停止も Pass も出ません。ターミナルの `filter:` の行が意図したファイルか確認してください。前回の実行を再実行すると、前のファイルのままになることがあります。
+- DB結合とSupabase結合の構成は、デバッグ時も上記の前提（Docker / `npx supabase start`）が必要です。
+- ブレークポイントが効かないときは、`.zed/debug.json` の `args` に `--pool=forks --poolOptions.forks.singleFork` を足してください。
+
+詳細は [specs/06_test_strategy.md](specs/06_test_strategy.md)。
 
 ## 本番の環境変数
 デプロイ先には `.env.example` の3つ（`DATABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）を設定します。
@@ -69,5 +91,6 @@ Docker が必要です。テスト用のPostgreSQL（`supabase-local-vitest` コ
 - `npm run build` / `npm run start`: 本番ビルド / 起動。
 - `npm run db:generate`: `schema.ts` から migration 用のSQLを生成します（適用はしません）。
 - `npm run db:seed`: 開発用ユーザーとサンプルデータを `.env.local` のDBへ投入します。
-- `npm run test`: Vitest を使用してテストを実行します。
+- `npm run test`: Vitest でDB結合のテストを実行します（ユニットとSupabase結合は含みません）。
+- `npm run test:unit` / `npm run test:integration`: ユニット / Supabase結合のテストを実行します（上記「テスト」を参照）。
 - `npm run db:up` / `npm run db:down`: `docker-compose.yml` の素のPostgreSQLを起動/停止します（Supabase を使わない場合の旧構成。`auth` スキーマが無いため、現行のスキーマはそのままでは適用できません）。
