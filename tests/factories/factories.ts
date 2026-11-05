@@ -2,7 +2,7 @@ import { defineFactory } from '@praha/drizzle-factory';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { pgSchema, uuid } from 'drizzle-orm/pg-core';
 import { randomUUID } from 'crypto';
-import { client } from '../../src/shared/db';
+import { adminClient } from '../../src/shared/db/admin';
 import { assemblies, parts, partInstances } from '../../src/shared/db/schema';
 
 // auth.users は Supabase 側のテーブル。テストDBでは tests/utils/supabaseStub.ts が id だけのスタブを作る。
@@ -13,9 +13,9 @@ export const authUsersStub = pgSchema('auth').table('users', {
 
 export const factorySchema = { authUsers: authUsersStub, assemblies, parts, partInstances };
 
-// アプリの db とは同じ接続を共有しつつ、スタブ (auth.users) を含むスキーマで作るファクトリ専用のインスタンス。
-// postgres ロール (RLS を受けない) で投入する。
-export const factoryDb = drizzle(client, { schema: factorySchema });
+// 管理用の接続 (adminDb) を共有しつつ、スタブ (auth.users) を含むスキーマで作るファクトリ専用のインスタンス。
+// postgres ロール (RLS を受けない) で投入する。アプリ用の app_runtime では design スキーマへ書けない。
+export const factoryDb = drizzle(adminClient, { schema: factorySchema });
 
 export const userFactory = defineFactory({
     schema: factorySchema,

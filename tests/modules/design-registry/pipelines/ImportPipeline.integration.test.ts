@@ -4,6 +4,7 @@ import { ImportPipelineImpl } from '../../../../src/modules/design-registry/pipe
 import { StorageService } from '../../../../src/shared/services';
 import { NotFoundError } from '../../../../src/shared/errors';
 import { db } from '../../../../src/shared/db';
+import { adminDb } from '../../../../src/shared/db/admin';
 import { parts, partInstances } from '../../../../src/shared/db/schema';
 import { createTestAssembly } from '../../../factories';
 import { asUser, BUCKET, createUserTracker, getAdmin, listBucketFiles } from '../../../integration/helpers';
@@ -34,10 +35,10 @@ describe('ImportPipeline (Supabase結合: 実STL → 実バケット → DB)', (
 
     // 共有の開発DBを TRUNCATE できないため、件数は「このテストのアセンブリ配下」だけを数える
     async function rowsOf(assemblyId: string) {
-        const partRows = await db.select().from(parts).where(eq(parts.assemblyId, assemblyId));
+        const partRows = await adminDb.select().from(parts).where(eq(parts.assemblyId, assemblyId));
         const instanceRows = partRows.length === 0
             ? []
-            : await db.select().from(partInstances).where(inArray(partInstances.partId, partRows.map((p) => p.id)));
+            : await adminDb.select().from(partInstances).where(inArray(partInstances.partId, partRows.map((p) => p.id)));
         return { parts: partRows, instances: instanceRows };
     }
 

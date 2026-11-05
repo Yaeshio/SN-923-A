@@ -2,8 +2,12 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-// このクライアントは postgres ロール (BYPASSRLS) で接続するため RLS を受けない。
-// アプリコードは ./rls の withUser 経由で使い、素の db はテスト・seed・管理処理のみで使うこと。
+// アプリ用の接続。DATABASE_URL は専用ロール app_runtime (NOBYPASSRLS) で接続する
+// (supabase/migrations/*_create_app_runtime_role.sql)。
+// app_runtime は design スキーマの権限を直接持たないため、この db を素のまま使うクエリは permission denied になる。
+// 必ず ./rls の withUser 経由で使うこと (トランザクション内で authenticated ロールへ切り替えて RLS を効かせる)。
+//
+// migration・seed・テストなど、RLS を受けない管理用の接続は ./admin の adminDb を使う (アプリのコードからは import しない)。
 
 // DATABASE_URL is required for database operations.
 const connectionString = process.env.DATABASE_URL;

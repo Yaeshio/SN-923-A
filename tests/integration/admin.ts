@@ -10,7 +10,10 @@ export const INTEGRATION_EMAIL_DOMAIN = 'integration.example.com';
 
 export interface SupabaseEnv {
     apiUrl: string;
+    /** 管理用 (postgres ロール)。supabase status の DB_URL。DATABASE_ADMIN_URL にする。 */
     dbUrl: string;
+    /** アプリ用 (app_runtime ロール)。dbUrl のユーザー・パスワードを置き換えたもの。DATABASE_URL にする。 */
+    appDbUrl: string;
     anonKey: string;
     serviceRoleKey: string;
 }

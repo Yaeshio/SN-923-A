@@ -8,11 +8,13 @@ export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /**
  * ログインユーザーとしてトランザクションを実行し、Postgres の RLS をアプリのクエリにも効かせる。
  *
- * `db` は postgres ロール (テーブル所有者 / BYPASSRLS) で接続しているため、そのままでは RLS を受けない。
+ * `db` は専用ロール `app_runtime` (NOBYPASSRLS) で接続している。`app_runtime` は design スキーマの権限を直接持たず、
+ * `authenticated` へ切り替えられるだけなので、この関数を通さないクエリは permission denied になる。
  * トランザクション内で `authenticated` ロールへ切り替え、auth.uid() が参照する JWT claims を設定する。
  * すべて LOCAL なのでコミット/ロールバックで元に戻り、コネクションプールへは漏れない。
+ * (万一 RESET ROLE されても、戻り先は権限のない `app_runtime` であり、`postgres` のように RLS をバイパスできない)
  *
- * アプリコードの DB アクセスは必ずこの関数を経由すること。素の `db` はテスト・seed・管理処理のみで使う。
+ * アプリコードの DB アクセスは必ずこの関数を経由すること。テスト・seed・管理処理は `./admin` の `adminDb` を使う。
  */
 export async function withUser<T>(userId: string, fn: (tx: DbTransaction) => Promise<T>): Promise<T> {
     if (!isUuid(userId)) {

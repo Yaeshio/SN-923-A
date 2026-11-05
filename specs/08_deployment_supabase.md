@@ -3,6 +3,8 @@
 > **改訂メモ (2026-10-28)**: データモデルの再定義（`02_data_model.md`）に伴い、専用スキーマは `sn923a` から **`design`（設計側）+ `public`（製造・マスタ）** に変更した（`05_architecture.md` 3.3）。設計側3表は `design` に実装済みで、アクセス制御は本書 2.2 の `app_users` 方式ではなく**所有者別 RLS**（`02_data_model.md` 8.1）に改めた。本書の `sn923a` / `app_users` の記述は旧構成のもので、既にデプロイ済みの環境に残る旧スキーマの撤去は別途行う（破壊的なため未実施）。
 >
 > 現行の migration: `20261028100000_create_design_schema.sql`（design スキーマ・RLS）、`20261028100100_secure_stl_storage.sql`（`stl-files` バケットをオーナー別フォルダの RLS に。プレゼン用の全許可ポリシーを撤回するため、旧バージョンのアプリ（anon での Storage 操作）とは併用できない）。`design` は PostgREST の公開スキーマ（`api.schemas` / Extra exposed schemas）に**追加しない**。
+>
+> **改訂メモ (2026-11-05)**: アプリの接続を `postgres` から専用ロール `app_runtime`（NOBYPASSRLS）へ切り替えた（`20261105100000_create_app_runtime_role.sql`）。パスワードは migration に含めず環境ごとに設定する。手順は 6 を参照。
 
 ## 1. 目的と要件
 本ドキュメントは、現在開発中のアプリケーション（SN-923-A）のデータベースおよびバックエンドリソースを、**既に稼働中または作成済みのSupabase本番プロジェクト**へデプロイするための手順と仕様を定義します。
@@ -174,7 +176,56 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA sn923a GRANT ALL ON SEQUENC
 
 ---
 
-## 6. まとめ（プレゼン・アピールポイント）
+## 6. アプリの接続ロール (app_runtime)
+
+> 本節は現行構成（`design` スキーマ + 所有者別 RLS）の手順である。2〜5 の `sn923a` / `app_users` の記述は旧構成のもの。
+
+### 6.1 目的
+アプリは Drizzle で DB に直結する。接続ロールがテーブル所有者の `postgres`（`BYPASSRLS`）だと、`withUser` を使い忘れても RLS が黙ってバイパスされる。アプリの接続ロール自体を RLS をバイパスできない `app_runtime` にして、DB 側で強制する（`05_architecture.md` 3.4）。
+
+| ロール | 用途 | 接続先の環境変数 |
+| :--- | :--- | :--- |
+| `app_runtime` | アプリの実行（Next.js）。`design` スキーマの権限を直接持たず、`withUser` が `authenticated` へ切り替えるときだけ権限を使う | `DATABASE_URL` |
+| `postgres` | migration・seed・テスト・drizzle-kit | `DATABASE_ADMIN_URL`（**アプリの実行環境には設定しない**） |
+
+### 6.2 ロールの作成とパスワード
+- ロールは `supabase/migrations/20261105100000_create_app_runtime_role.sql` が作る（`LOGIN` / `NOSUPERUSER` / `NOBYPASSRLS` / `NOINHERIT`。`GRANT authenticated TO app_runtime`）。他の migration と同じく `supabase db push` で適用する。冪等なので再適用できる。
+- **パスワードは migration に書かない**（リポジトリに残さない）。適用後に環境ごとに設定する。
+  ```sql
+  ALTER ROLE app_runtime PASSWORD '<強いパスワード>';
+  ```
+  SQL Editor か `psql` で、`postgres` ロールとして実行する。パスワードに記号を含める場合は、接続文字列で URL エンコードする。
+- ロールはクラスタ共通である。共有プロジェクトで `app_runtime` の名前が他のアプリと衝突しないか、作成前に `select rolname from pg_roles where rolname = 'app_runtime'` で確認する。
+
+### 6.3 接続文字列（Supavisor の Transaction pooler）
+- ユーザー名は `app_runtime.<project-ref>`（Dashboard > Connect > Transaction pooler の `postgres.<project-ref>` の `postgres` を `app_runtime` に替える）。ホストとポート（6543）はコピーしたものをそのまま使う。
+- `withUser` は `set_config(..., true)` と `SET LOCAL ROLE` をトランザクション内で実行する。Transaction mode では、トランザクションの間は同じバックエンド接続に固定される仕様で、`LOCAL` なのでトランザクションの外へは漏れない（コネクションへ残らないことは `tests/db/rls.test.ts` で確認済み）。ローカルの pooler は無効（`config.toml` の `[db.pooler]`）で、pooler 経由で `app_runtime` が動くことは**本番の手順 6.4 の 4 で確認する**。
+
+### 6.4 本番の切り替え手順（無停止）
+コードは後方互換である（アプリは `DATABASE_URL` だけを読む）。次の順で行い、各ステップの前に確認する。
+1. コードをデプロイする（この時点では `DATABASE_URL` は `postgres` のままで、挙動は変わらない）。
+2. `supabase db push` で migration を適用する（ロールが作られる。まだ誰も使わない）。
+3. `ALTER ROLE app_runtime PASSWORD '...'` を設定する。
+4. pooler（6543）の `app_runtime.<project-ref>` で接続できること、`withUser` 相当のトランザクション（`set_config` → `SET LOCAL ROLE authenticated` → 自分の行だけが見える）が動くこと、`withUser` なしでは `permission denied` になることを確認する。
+5. デプロイ先の `DATABASE_URL` を `app_runtime` のものに替えて再デプロイし、動作確認する（ログイン → アセンブリ → インポート → ダウンロード）。
+6. 問題があれば `DATABASE_URL` を元の接続文字列に戻して再デプロイする（ロールは残してよい）。
+
+### 6.5 実環境での権限の確認
+ローカルの Supabase（`supabase start`、PG17）で確認した事実。テストは `tests/db/appRuntime.integration.test.ts`。
+- `postgres` ロールは `authenticated` の `ADMIN OPTION` と `CREATEROLE` を持つため、migration の `CREATE ROLE` と `GRANT authenticated TO app_runtime WITH INHERIT FALSE, SET TRUE` が通る。
+- `app_runtime` が直接読み書きできるテーブルは、`design` / `auth` / `storage` / `public` / `sn923a` のどれにも無い。`public` には `CREATE` もできない。`authenticated` には `design`・`public`・`storage` などの権限があるため、`app_runtime` が `withUser` の外では何も届かないことが、この差で分かる。
+- **`net` スキーマ（pg_net 拡張）は例外**: Supabase が `PUBLIC` へ既定で付与している（`USAGE`、`net._http_response` / `net.http_request_queue` の全権限、`http_delete` などの EXECUTE）。`supabase_admin` 所有で `postgres` では変更できず、`anon` を含む全ロールに共通する。`http_get` / `http_post` の EXECUTE は `PUBLIC` に付いていない。アプリのデータとは無関係なので、対処しない。
+- 本番でも、手順 6.4 の 4 で次のクエリを `postgres` で実行し、`app_runtime` が直接届くテーブルに上記以外が無いことを確認する。共有プロジェクトでは、他のアプリのテーブルや Supabase の既定の付与が、ローカルと異なる可能性がある。
+  ```sql
+  select c.relnamespace::regnamespace as schema, c.relname
+  from pg_class c
+  where c.relkind in ('r', 'v', 'm', 'p', 'f')
+    and c.relnamespace::regnamespace::text not in ('pg_catalog', 'information_schema')
+    and has_table_privilege('app_runtime', c.oid, 'SELECT, INSERT, UPDATE, DELETE')
+  order by 1, 2;
+  ```
+
+## 7. まとめ（プレゼン・アピールポイント）
 本構成を採用することで、MVP デモおよび本番運用において以下の強力なメリットをアピールできます。
 
 1. **ゼロ・コンタミネーション（非干渉）:** 

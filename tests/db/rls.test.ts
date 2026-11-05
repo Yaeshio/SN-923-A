@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../src/shared/db';
+import { adminDb } from '../../src/shared/db/admin';
 import { withUser } from '../../src/shared/db/rls';
 import { assemblies, parts, partInstances } from '../../src/shared/db/schema';
 import { ValidationError } from '../../src/shared/errors';
@@ -8,7 +9,9 @@ import { sqlState } from '../utils/db';
 import { createTestAssembly, createTestPart, createTestUser } from '../factories';
 
 // ログインユーザー (authenticated ロール) は自分 (owner) のデータだけを CRUD できる。
-// 素の db (postgres ロール) は RLS を受けないため、検証はすべて withUser 経由、または明示的なロール切り替えで行う。
+// db (アプリ用の app_runtime) は withUser 経由でのみ design スキーマを使える。
+// adminDb (postgres ロール) は RLS を受けないため、データの確認や、anon など別ロールへの切り替えの検証に使う。
+// withUser を通さない素の db の拒否は appRuntime.test.ts で確認する。
 
 const INSUFFICIENT_PRIVILEGE = '42501';
 
@@ -87,10 +90,10 @@ describe('design スキーマの RLS', () => {
                 expect(await tx.delete(assemblies).where(eq(assemblies.id, assembly.id)).returning()).toHaveLength(0);
             });
 
-            const [stored] = await db.select().from(assemblies).where(eq(assemblies.id, assembly.id));
+            const [stored] = await adminDb.select().from(assemblies).where(eq(assemblies.id, assembly.id));
             expect(stored.name).toBe('alice-assembly');
-            expect(await db.select().from(parts)).toHaveLength(1);
-            expect(await db.select().from(partInstances)).toHaveLength(1);
+            expect(await adminDb.select().from(parts)).toHaveLength(1);
+            expect(await adminDb.select().from(partInstances)).toHaveLength(1);
         });
 
         it('他人のアセンブリへパーツを追加できないこと', async () => {
@@ -101,7 +104,7 @@ describe('design スキーマの RLS', () => {
             })));
 
             expect(state).toBe(INSUFFICIENT_PRIVILEGE);
-            expect(await db.select().from(parts)).toHaveLength(1);
+            expect(await adminDb.select().from(parts)).toHaveLength(1);
         });
 
         it('他人のパーツへインスタンス (改訂) を追加できないこと', async () => {
@@ -112,7 +115,7 @@ describe('design スキーマの RLS', () => {
             })));
 
             expect(state).toBe(INSUFFICIENT_PRIVILEGE);
-            expect(await db.select().from(partInstances)).toHaveLength(1);
+            expect(await adminDb.select().from(partInstances)).toHaveLength(1);
         });
 
         it('他人を所有者にしたアセンブリを作れないこと', async () => {
@@ -136,7 +139,7 @@ describe('design スキーマの RLS', () => {
         it('anon ロールは design スキーマにアクセスできないこと', async () => {
             await setupTwoUsers();
 
-            const state = await sqlState(db.transaction(async (tx) => {
+            const state = await sqlState(adminDb.transaction(async (tx) => {
                 await tx.execute(sql`set local role anon`);
                 await tx.select().from(assemblies);
             }));
@@ -147,7 +150,7 @@ describe('design スキーマの RLS', () => {
         it('JWT claims が無い authenticated ロールは、何も参照できないこと', async () => {
             await setupTwoUsers();
 
-            const seen = await db.transaction(async (tx) => {
+            const seen = await adminDb.transaction(async (tx) => {
                 await tx.execute(sql`set local role authenticated`);
                 return tx.select().from(assemblies);
             });
@@ -168,11 +171,12 @@ describe('design スキーマの RLS', () => {
             for (let i = 0; i < 12; i++) {
                 await withUser(alice.id, async (tx) => tx.select().from(assemblies));
             }
+            // withUser の外では、アプリ用の接続は元の app_runtime のまま (authenticated や claims が残らない)
             for (let i = 0; i < 12; i++) {
                 const [row] = await db.execute<{ current_user: string; sub: string | null }>(
                     sql`select current_user, nullif(current_setting('request.jwt.claim.sub', true), '') as sub`,
                 );
-                expect(row.current_user).toBe('postgres');
+                expect(row.current_user).toBe('app_runtime');
                 expect(row.sub).toBeNull();
             }
         });
@@ -185,7 +189,7 @@ describe('design スキーマの RLS', () => {
                 throw new Error('boom');
             })).rejects.toThrow('boom');
 
-            expect(await db.select().from(assemblies)).toHaveLength(0);
+            expect(await adminDb.select().from(assemblies)).toHaveLength(0);
         });
     });
 });

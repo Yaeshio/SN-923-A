@@ -91,14 +91,15 @@ src/
 
 - 実装は Drizzle の `pgSchema('design')` で定義する（設計側3表は実装済み。`public` 側は製造側の実装時に追加する）。`drizzle.config.ts` の `schemaFilter` は当面 `['design']` とする。共有 Supabase の `public` には他アプリのテーブルがあり、`public` を含めると差分適用が他アプリのテーブルを DROP しようとするため、`public` 側を追加する時点で扱いを決める。
 - **スキーマの適用は `supabase/migrations/*.sql` を正とする。`drizzle-kit push` は使わない**（RLS ポリシーの `USING` / `WITH CHECK` を落として作成することを確認した）。`schema.ts` を変更したら `npm run db:generate` で SQL を生成し、整形して migration に取り込む。テストDBも同じ migration から作る（`06_test_strategy.md` 2.1）。
-- アプリのDBアクセスは Drizzle の直接接続（`DATABASE_URL`）で行い、`supabase-js` は Storage にのみ使う。そのため、Supabase のデータAPI（PostgREST）に対するスキーマ公開設定は不要である。
+- アプリのDBアクセスは Drizzle の直接接続（`DATABASE_URL`、専用ロール `app_runtime`。3.4）で行い、`supabase-js` は Storage にのみ使う。そのため、Supabase のデータAPI（PostgREST）に対するスキーマ公開設定は不要である。
 - テストのクリーンアップ（`TRUNCATE`）は両スキーマのテーブルを対象にする（`06_test_strategy.md`）。
 
 ### 3.4 認可（行レベルセキュリティ）
-設計データは所有者（`assemblies.owner_id`）ごとに分離する（`02_data_model.md` 8.1）。アプリは Drizzle で直結し、接続ロール（`postgres`）は RLS を受けないため、次の規則で RLS をアプリのクエリに効かせる。
+設計データは所有者（`assemblies.owner_id`）ごとに分離する（`02_data_model.md` 8.1）。アプリは Drizzle で直結する。テーブル所有者の `postgres` ロールは `BYPASSRLS` で RLS を受けないため、アプリは `postgres` では接続せず、RLS をバイパスできない専用ロール `app_runtime` で接続し、次の規則で RLS をアプリのクエリに効かせる。
 
 - **DB アクセスはすべて `withUser(userId, fn)`（`src/shared/db/rls.ts`）を経由する。** トランザクション内で `set_config('request.jwt.claims' / 'request.jwt.claim.sub', …, true)` と `SET LOCAL ROLE authenticated` を実行してから `fn(tx)` を呼ぶ。`LOCAL` なので、コミット/ロールバックで元に戻り、コネクションプールへ漏れない。
-- 素の `db`（`src/shared/db`）は RLS を受けない。テスト・seed・管理処理のみで使い、アプリコード（Server Action / Pipeline / Service / Page）からは直接使わない。
+- **接続ロールは `app_runtime`（`DATABASE_URL`）。** `LOGIN` / `NOSUPERUSER` / `NOBYPASSRLS` / `NOINHERIT` で、`authenticated` のメンバーだが権限は引き継がない。`design` スキーマの権限は直接持たないため、`withUser` を使い忘れた素の `db` のクエリは `permission denied` になる（規約ではなく DB で強制する）。`RESET ROLE` されても戻り先は権限のない `app_runtime` で、`postgres` のように RLS をバイパスできない。ロールは `supabase/migrations/*_create_app_runtime_role.sql` で作る。パスワードは migration に含めず、環境ごとに設定する（`08_deployment_supabase.md` 6）。
+- **接続は2つに分ける。** アプリ用の `db`（`src/shared/db/index.ts`、`DATABASE_URL`、`app_runtime`）と、管理用の `adminDb`（`src/shared/db/admin.ts`、`DATABASE_ADMIN_URL`、`postgres`）。`adminDb` は RLS を受けないため、migration・seed・テストなど、アプリの外のスクリプトだけが使い、アプリコード（Server Action / Pipeline / Service / Page）からは import しない。アプリの実行環境（本番）には `DATABASE_ADMIN_URL` を設定しない。`adminDb` は `DATABASE_ADMIN_URL` が無いと import 時にエラーになり、`DATABASE_URL` へはフォールバックしない。
 - `userId` は Server Action が `requireUser()`（`supabase.auth.getUser()` でAuthサーバに検証させる）から得て、Pipeline / Service へ明示的に渡す。
 - Storage はユーザーのセッション付きクライアントで呼び、`storage.objects` の RLS（先頭フォルダ = `auth.uid()`）で所有者を判定する（`04_logic_api.md` 2.2）。
 - 新しいテーブルを追加するときは、RLS を有効にし、所有者をたどれるポリシーを定義する（設計側は親の可視性を継承）。

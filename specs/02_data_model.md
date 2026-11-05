@@ -296,7 +296,8 @@ Storage 上のファイルは削除に連動させず、DB から参照されな
 | `parts` | 親アセンブリが見える（`EXISTS (SELECT 1 FROM assemblies WHERE id = parts.assembly_id)`）。親の RLS が入れ子で効くため、他人のアセンブリへは追加できない |
 | `part_instances` | 親パーツが見える（同様に入れ子） |
 
-- アプリは Drizzle で直結する（`postgres` ロールは `BYPASSRLS` で RLS を受けない）。そのため、DB アクセスは `src/shared/db/rls.ts` の `withUser(userId, fn)` を経由し、トランザクション内で `SET LOCAL ROLE authenticated` と JWT claims を設定して RLS を効かせる（→ `05_architecture.md` 3.4）。
+- アプリは Drizzle で直結する。接続ロールは専用の `app_runtime`（`LOGIN` / `NOSUPERUSER` / `NOBYPASSRLS` / `NOINHERIT`）で、`design` スキーマの権限を直接持たない。DB アクセスは `src/shared/db/rls.ts` の `withUser(userId, fn)` を経由し、トランザクション内で `SET LOCAL ROLE authenticated` と JWT claims を設定して RLS を効かせる（→ `05_architecture.md` 3.4）。`withUser` を通さないクエリは `permission denied` になる。
+- `postgres` ロール（テーブル所有者）は `BYPASSRLS` で RLS を受けない。migration・seed・テストなどの管理用接続（`DATABASE_ADMIN_URL`）だけが使い、アプリの実行環境には渡さない。
 - 他人のデータは「存在しない」と区別できない（`NotFoundError` / 404）。
 - `design` スキーマは PostgREST に公開しない。`authenticated` への `GRANT` はアプリの直結アクセスのためである。
 - `parts` の `(assembly_id, model_name)` ユニーク制約は、再インポート（CADデータの改版）を `part_instances` の新しい改訂として扱うか、新規パーツとして扱うかの方針が決まってから判断する（将来拡張）。

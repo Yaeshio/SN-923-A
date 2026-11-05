@@ -37,14 +37,15 @@ async function seed() {
     const ownerId = await ensureDevUser();
     console.log(`Dev user: ${DEV_USER_EMAIL} (password: ${DEV_USER_PASSWORD}) [${ownerId}]`);
 
-    // env を読み込んだ後に db を初期化するため、動的に import する
+    // env を読み込んだ後に接続を初期化するため、動的に import する。
+    // 投入は管理用 (DATABASE_ADMIN_URL、postgres ロール)。アプリ用の app_runtime では design スキーマへ書けない。
     const { seedDesignSamples } = await import('./factories/seed');
-    const { client } = await import('../src/shared/db');
+    const { adminClient } = await import('../src/shared/db/admin');
 
     const { assembly, parts } = await seedDesignSamples(ownerId);
     console.log(`Assembly created: ${assembly.name} (parts: ${parts.map((p) => p.part.modelName).join(', ')})`);
 
-    await client.end();
+    await adminClient.end();
     console.log('Seeding completed successfully!');
 }
 
