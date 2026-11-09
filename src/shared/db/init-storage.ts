@@ -7,7 +7,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJ
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function initStorage() {
-  const { data, error } = await supabase.storage.createBucket('stl-files', {
+  const { error } = await supabase.storage.createBucket('stl-files', {
     public: false,
     allowedMimeTypes: ['application/octet-stream', 'model/stl', 'text/plain'], // STL can be binary or ascii
     fileSizeLimit: 52428800 // 50MB

@@ -26,8 +26,9 @@ export async function teardownDb() {
 export async function sqlState(promise: Promise<unknown>): Promise<string | undefined> {
     try {
         await promise;
-    } catch (error: any) {
-        return error.cause?.code ?? error.code;
+    } catch (error) {
+        const e = error as { cause?: { code?: string }; code?: string };
+        return e.cause?.code ?? e.code;
     }
     return undefined;
 }

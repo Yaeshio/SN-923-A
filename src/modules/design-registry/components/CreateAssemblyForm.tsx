@@ -21,8 +21,8 @@ export function CreateAssemblyForm() {
             } else {
                 setError(result.fieldErrors?.name?.[0] ?? result.error);
             }
-        } catch (e: any) {
-            setError(e.message || 'An unexpected error occurred');
+        } catch (e) {
+            setError((e instanceof Error && e.message) || 'An unexpected error occurred');
         } finally {
             setIsPending(false);
         }
