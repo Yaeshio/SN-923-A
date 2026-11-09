@@ -103,6 +103,18 @@ PR と `main` への push で、`.github/workflows/ci.yml` が次の3ジョブ�
 - DB を使うテストは、まだ CI では実行していません。
 - `eslint` は 9 系に固定しています。`eslint-plugin-react` / `import` / `jsx-a11y` が ESLint 10 に未対応のためです。
 
+### デプロイ（GitHub Actions → Vercel）
+デプロイは同じ `ci.yml` が Vercel CLI で行います。Vercel の Git 連携による自動デプロイは `vercel.json` で無効化しています。上の3ジョブがすべて成功した場合のみ実行されます。
+
+| ジョブ | 契機 | 内容 |
+| :--- | :--- | :--- |
+| `deploy-preview` | PR（同一リポジトリのブランチのみ） | Preview をデプロイし、URL を PR にコメント |
+| `deploy-production` | `main` への push | Production をデプロイ（GitHub の `Production` environment に記録） |
+
+- 必要な Secrets: `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`（`VERCEL_ORG_ID` と `VERCEL_PROJECT_ID` は `vercel link` で作られる `.vercel/project.json` の `orgId` / `projectId`）。
+- ビルドは Actions 上で `vercel build` を実行し、`vercel deploy --prebuilt` で成果物をアップロードします。環境変数は Vercel の設定を `vercel pull` で取得します。
+- `deploy-*` は branch protection の必須チェックには入れていません（Secrets や Vercel の障害でマージできなくなるのを避けるため）。
+
 ## 本番の環境変数
 デプロイ先には `.env.example` の3つ（`DATABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）を設定します。**`DATABASE_ADMIN_URL`（`postgres` ロール）はデプロイ先に設定しません。**
 
