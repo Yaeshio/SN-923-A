@@ -144,7 +144,7 @@ describe('ImportPipeline', () => {
             // 1回目 (アセンブリの存在確認) は実処理、2回目 (登録) だけ失敗させる
             const realTransaction = db.transaction.bind(db);
             const spy = vi.spyOn(db, 'transaction')
-                .mockImplementationOnce(realTransaction as any)
+                .mockImplementationOnce(realTransaction as typeof db.transaction)
                 .mockRejectedValueOnce(new Error('DB unavailable'));
 
             await expect(pipeline.execute(
@@ -163,12 +163,12 @@ describe('ImportPipeline', () => {
             // 1回目 (アセンブリの存在確認) は実処理。2回目 (登録) の直前にアセンブリを削除して、競合削除を再現する
             const realTransaction = db.transaction.bind(db);
             vi.spyOn(db, 'transaction')
-                .mockImplementationOnce(realTransaction as any)
-                .mockImplementationOnce(async (fn: any) => {
+                .mockImplementationOnce(realTransaction as typeof db.transaction)
+                .mockImplementationOnce((async (fn: Parameters<typeof db.transaction>[0]) => {
                     // 検証後・登録前にアセンブリが削除された状況を作る
                     await adminDb.delete(assemblies);
                     return realTransaction(fn);
-                });
+                }) as typeof db.transaction);
 
             await expect(pipeline.execute({ assemblyId: assembly.id, files: [stl('a.stl')] }, ctx)).rejects.toThrow();
             vi.restoreAllMocks();

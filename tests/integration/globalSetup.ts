@@ -35,7 +35,8 @@ function readSupabaseEnv(): SupabaseEnv {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'pipe'],
         });
-    } catch (error: any) {
+    } catch (e) {
+        const error = e as { stderr?: string; message?: string };
         throw new Error(
             'このリポジトリ (supabase/config.toml の project_id) の Supabase スタックに接続できません。\n'
             + '`npx supabase start` で起動してから、もう一度実行してください。\n'

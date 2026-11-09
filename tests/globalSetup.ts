@@ -35,7 +35,7 @@ async function ensureDbRunning() {
                 console.warn('Port 5432 is occupied by a non-docker process or unknown container. Tests might fail if it is not PostgreSQL.');
                 return;
             }
-        } catch (e) {
+        } catch {
             // Port is free or nc failed (meaning port is likely free)
         }
 
@@ -57,7 +57,7 @@ async function ensureDbRunning() {
                 execSync(`docker exec ${containerName} pg_isready -U postgres`, { stdio: 'ignore' });
                 ready = true;
                 break;
-            } catch (err) {
+            } catch {
                 await wait(1000);
             }
         }

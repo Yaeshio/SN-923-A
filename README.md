@@ -89,6 +89,20 @@ Docker が必要です。テスト用のPostgreSQL（`supabase-local-vitest` コ
 
 詳細は [specs/06_test_strategy.md](specs/06_test_strategy.md)。
 
+## CI（GitHub Actions）
+PR と `main` への push で、`.github/workflows/ci.yml` が次の3ジョブを並列に実行します。`main` ではいずれかが失敗するとマージできません（branch protection の必須チェック）。
+
+| ジョブ | 内容 | 手元での再現 |
+| :--- | :--- | :--- |
+| `typecheck` | 型チェック | `npx tsc --noEmit` |
+| `lint` | ESLint（`eslint.config.mjs`） | `npm run lint` |
+| `build` | 本番ビルド | `npm run build` |
+
+- Node のバージョンは `.nvmrc`（24）で固定しています。
+- `build` は `DATABASE_URL` などの環境変数を設定せずに実行します。手元で試すときは、`.env*` を外した状態か、環境変数を未設定にして実行してください。
+- DB を使うテストは、まだ CI では実行していません。
+- `eslint` は 9 系に固定しています。`eslint-plugin-react` / `import` / `jsx-a11y` が ESLint 10 に未対応のためです。
+
 ## 本番の環境変数
 デプロイ先には `.env.example` の3つ（`DATABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）を設定します。**`DATABASE_ADMIN_URL`（`postgres` ロール）はデプロイ先に設定しません。**
 
@@ -105,6 +119,7 @@ Docker が必要です。テスト用のPostgreSQL（`supabase-local-vitest` コ
 ## 利用可能なスクリプト
 - `npm run dev`: Next.js の開発サーバーを起動します。
 - `npm run build` / `npm run start`: 本番ビルド / 起動。
+- `npm run lint`: ESLint を実行します（`next lint` は Next 16 で廃止されたため、`eslint` を直接実行します）。
 - `npm run db:generate`: `schema.ts` から migration 用のSQLを生成します（適用はしません）。
 - `npm run db:seed`: 開発用ユーザーとサンプルデータを `.env.local` のDBへ投入します（`DATABASE_ADMIN_URL` で接続します）。
 - `npm run test`: Vitest でDB結合のテストを実行します（ユニットとSupabase結合は含みません）。

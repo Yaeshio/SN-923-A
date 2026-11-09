@@ -150,7 +150,7 @@ describe('ImportPipeline (Supabase結合: 実STL → 実バケット → DB)', (
             // 1回目 (アセンブリの存在確認) は実処理、2回目 (登録) だけ失敗させる
             const realTransaction = db.transaction.bind(db);
             vi.spyOn(db, 'transaction')
-                .mockImplementationOnce(realTransaction as any)
+                .mockImplementationOnce(realTransaction as typeof db.transaction)
                 .mockRejectedValueOnce(new Error('DB unavailable'));
 
             await expect(pipeline.execute({
