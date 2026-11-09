@@ -120,5 +120,5 @@ src/
 
 ## 5. 開発・デプロイフロー
 - **データベース管理**: Supabase Dashboard / Supabase CLI を使用し、開発用環境（ローカル）と本番用プロジェクトを分離する。
-- **本番反映**: Vercel の Preview Deployment を活用し、性能・動作検証後に本番ブランチへマージする。
+- **本番反映**: GitHub Actions (`.github/workflows/ci.yml`) が、typecheck / lint / build の通過後に Vercel CLI でデプロイする。PR では Preview、`main` への push では Production。Preview で性能・動作検証後に本番ブランチへマージする。Vercel の Git 連携による自動デプロイは `vercel.json` で無効化している。必要な GitHub Secrets は `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`。
 - **環境差異**: `.env.local` (開発用) と Vercel Environment Variables (本番用) で Supabase の接続先（URL、Anon Key、DB URL）を切り替える。

@@ -1,7 +1,12 @@
 name: CI
 
-# PR と main への push で、型チェック・lint・ビルドを実行する。
+# PR と main への push で、型チェック・lint・ビルドを実行し、3 ジョブがすべて通った場合のみ Vercel にデプロイする。
+#   - PR      : deploy-preview    (Preview。URL を PR にコメント)
+#   - main    : deploy-production (Production)
+# デプロイは Vercel CLI で行う。Vercel の Git 連携による自動デプロイは vercel.json で無効化している。
+# 必要な Secrets: VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID
 # ジョブ名 (typecheck / lint / build) は branch protection の required check 名になるため、変更するときは設定も合わせて直すこと。
+# deploy-* は required check にしない (Secrets や Vercel の障害でマージ不能になるのを避けるため)。
 on:
   pull_request:
   push:
@@ -9,7 +14,13 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # main への push は途中キャンセルしない (本番デプロイの中断を避ける)。PR は新しい push で古い実行を止める。
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  VERCEL_CLI: vercel@65.12.1
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 permissions:
   contents: read
@@ -57,3 +68,71 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+
+  deploy-preview:
+    name: deploy-preview
+    # fork からの PR には Secrets が渡らないため対象外にする。
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [typecheck, lint, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Vercel の設定と環境変数を取得
+        run: npx --yes "$VERCEL_CLI" pull --yes --environment=preview --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: ビルド
+        run: npx --yes "$VERCEL_CLI" build --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: デプロイ
+        id: deploy
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --token="${{ secrets.VERCEL_TOKEN }}")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: PR に Preview URL をコメント
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- vercel-preview -->';
+            const body = `${marker}\nPreview: ${process.env.PREVIEW_URL}\n(コミット: ${context.payload.pull_request.head.sha.slice(0, 7)})`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  deploy-production:
+    name: deploy-production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [typecheck, lint, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Vercel の設定と環境変数を取得
+        run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: ビルド
+        run: npx --yes "$VERCEL_CLI" build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: デプロイ
+        id: deploy
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
